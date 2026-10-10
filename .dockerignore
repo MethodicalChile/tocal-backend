@@ -1,0 +1,14 @@
+.git
+.env*
+!.env.example
+.venv
+__pycache__
+*.pyc
+.qa
+storage
+backups
+*.sqlite3
+.pytest_cache
+
+# Originales de seed pueden incluir empresas, RUT, nombres o fotografías identificables
+seed-assets/

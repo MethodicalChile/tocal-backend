@@ -1,0 +1,5 @@
+-r requirements.txt
+ruff==0.16.10
+playwright==1.63.0
+pyee==13.0.1
+greenlet==3.5.6

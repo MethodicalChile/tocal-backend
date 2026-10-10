@@ -1,0 +1,17 @@
+.env
+.env.local
+.env.*
+!.env.example
+.venv/
+__pycache__/
+*.py[cod]
+*.sqlite3
+storage/
+backups/
+staticfiles/
+.qa/
+.pytest_cache/
+*.log
+
+# Originales de seed pueden incluir empresas, RUT, nombres o fotografías identificables
+seed-assets/

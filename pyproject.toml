@@ -1,0 +1,11 @@
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+exclude = ["legacy", "node_modules", ".venv", ".qa", "scripts/extract-angol.py", "scripts/extract-ventas.py", "scripts/logo.py"]
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F", "I"]
+
+[tool.ruff.lint.per-file-ignores]
+"config/test_settings.py" = ["F403", "F405"]
+"intranet/migrations/*.py" = ["E501"]

@@ -1,0 +1,1 @@
+Las pruebas de interfaz monolítica se archivaron en `../../docs/legacy-tests/` porque sus rutas HTML ya no existen. Agrega pruebas de integración con Supabase real y E2E Vue antes de producción.

@@ -1,0 +1,36 @@
+{% load tocal %}
+{% comment %}Tabla de dotación del PDF (report_document.html). La app usa components/staff_table.html.{% endcomment %}
+<div class="table-wrap">
+  <table>
+    <thead>
+      <tr>
+        <th>Semana</th>
+        <th>Personal Tocal</th>
+        <th>Subcontrato</th>
+        <th>HH Tocal</th>
+        <th>HH totales</th>
+        <th>HH acumuladas</th>
+        <th>Incidentes</th>
+        <th>Accidentes</th>
+        <th>Días perdidos</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in series %}
+        <tr>
+          <td>{{ row.numero }}</td>
+          <td>{{ row.total_personal }}</td>
+          <td>{{ row.personal_sc }}</td>
+          <td>{{ row.hh_tocal|number:0 }}</td>
+          <td>{{ row.hh_totales|number:0 }}</td>
+          <td>{{ row.hh_acum|number:0 }}</td>
+          <td>{{ row.incidentes }}</td>
+          <td>{{ row.accidentes }}</td>
+          <td>{{ row.dias_perdidos }}</td>
+        </tr>
+      {% empty %}
+        <tr><td colspan="9">Sin dotación registrada.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>

@@ -1,0 +1,11 @@
+<ul>
+  {% for b in bullets %}
+    <li {% if b.destacado %}class="bold"{% endif %}>{{ b.texto }}{% if b.sub %}
+      <ul>
+        {% for text in b.sub %}<li>{{ text }}</li>{% endfor %}
+      </ul>
+    {% endif %}</li>
+  {% empty %}
+    <li>Sin observaciones registradas.</li>
+  {% endfor %}
+</ul>

@@ -1,0 +1,21 @@
+services:
+  backend:
+    build: ./tocal-backend
+    env_file:
+      - ./tocal-backend/.env
+    expose:
+      - '8000'
+    restart: unless-stopped
+    healthcheck:
+      test: ['CMD-SHELL','python -c "import socket; socket.create_connection((\"127.0.0.1\",8000),timeout=3).close()"']
+      interval: 20s
+      timeout: 5s
+      retries: 3
+  frontend:
+    build: ./tocal-frontend
+    depends_on:
+      backend:
+        condition: service_healthy
+    ports:
+      - '8080:80'
+    restart: unless-stopped

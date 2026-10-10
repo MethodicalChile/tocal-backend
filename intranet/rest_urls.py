@@ -1,0 +1,35 @@
+from django.urls import path
+from . import rest_api as a
+from . import privacy_api
+
+urlpatterns = [
+    path('health', a.health),
+    path('csrf', a.csrf),
+    path('auth/login', a.signin),
+    path('auth/logout', a.signout),
+    path('session', a.session),
+    path('dashboard', a.dashboard),
+    path('obras/<str:obra_id>/resumen', a.obra_summary),
+    path('obras/<str:obra_id>/pdr', a.pdr),
+    path('obras/<str:obra_id>/pdr/semanas', a.new_week),
+    path('obras/<str:obra_id>/pdr/semanas/<str:week_id>/dotacion', a.staffing_save),
+    path('obras/<str:obra_id>/pdr/semanas/<str:week_id>/checklist', a.checklist_save),
+    path('obras/<str:obra_id>/avance', a.avance),
+    path('obras/<str:obra_id>/avance/curvas/<str:curve_id>/puntos', a.point_save),
+    path('obras/<str:obra_id>/registros/<str:module>', a.resources),
+    path('obras/<str:obra_id>/registros/<str:module>/nuevo', a.resource),
+    path('obras/<str:obra_id>/registros/<str:module>/<str:pk>', a.resource),
+    path('obras/<str:obra_id>/fotos', a.photos),
+    path('obras/<str:obra_id>/fotos/subir', a.upload_photos),
+    path('obras/<str:obra_id>/informes', a.reports),
+    path('obras/<str:obra_id>/informes/<str:pk>', a.report_detail),
+    path('obras/<str:obra_id>/informes/<str:pk>/pdf', a.report_pdf),
+    path('ventas', a.sales),
+    path('ventas/documentos', a.sales_docs),
+    path('ventas/documentos/nuevo', a.sales_doc),
+    path('ventas/documentos/<str:pk>', a.sales_doc),
+    path('ventas/importar', a.sales_import),
+    path('ventas/consulta', a.sales_lookup),
+    path('privacidad/solicitudes', privacy_api.requests),
+    path('files/<path:key>', a.private_file),
+]
