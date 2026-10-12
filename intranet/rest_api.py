@@ -22,7 +22,7 @@ from django.utils import timezone
 from django.views.decorators.http import require_http_methods
 
 from . import models as m, forms as f, services as s, private_storage as storage
-from .access import get_obra, visible_obras, visible_modules, can_edit, require_editor
+from .access import get_obra, visible_obras, visible_modules, can_edit, require_editor, require_viewer
 from .calculations import sales_dashboard, extras_summary, rdi_summary, photo_summary, weighted_progress
 from .presentation import (obra_cards, obra_overview, obra_header, pdr_overview, checklist_sections,
     staffing_chart_data, accidents_chart_data, safety_rows, avance_tabs, activity_rows,
@@ -224,13 +224,14 @@ def obra_summary(request, obra_id):
 @api_call()
 def pdr(request, obra_id):
     obra = get_obra(request.user, obra_id)
+    require_viewer(request.user, "pdr", obra)
     weeks = list(m.Semana.objects.filter(obra=obra).order_by('-numero'))
     week = (get_object_or_404(m.Semana, obra=obra, pk=request.GET['semana'])
             if request.GET.get('semana') else (weeks[0] if weeks else None))
     checks = s.checklist_for(week) if week else None
     series = s.staffing_for(obra, week)
     safety = s.monthly_safety(series)
-    data = {'weeks': weeks, 'week': week, 'editable': can_edit(request.user, 'pdr'),
+    data = {'weeks': weeks, 'week': week, 'editable': can_edit(request.user, 'pdr', obra=obra),
             'staffing': form_schema(f.DotacionForm(instance=m.Dotacion.objects.filter(semana=week).first())) if week else None,
             'checklist': checks, 'sections': checklist_sections(checks) if checks else [],
             'series': series, 'safety': safety_rows(safety), 'tiles': pdr_overview(checks, week, series),
@@ -241,14 +242,16 @@ def pdr(request, obra_id):
 @api_call(('POST',))
 def new_week(request, obra_id):
     obra = get_obra(request.user, obra_id)
-    require_editor(request.user, 'pdr')
+    require_viewer(request.user, "pdr", obra)
+    require_editor(request.user, 'pdr', obra=obra)
     return response({'week': s.create_week(obra)}, 201)
 
 
 @api_call(('POST', 'PUT'))
 def staffing_save(request, obra_id, week_id):
     obra = get_obra(request.user, obra_id)
-    require_editor(request.user, 'pdr')
+    require_viewer(request.user, "pdr", obra)
+    require_editor(request.user, 'pdr', obra=obra)
     week = get_object_or_404(m.Semana, pk=week_id, obra=obra)
     data = input_data(request)
     form = f.DotacionForm(data, instance=m.Dotacion.objects.filter(semana=week).first())
@@ -266,7 +269,8 @@ def staffing_save(request, obra_id, week_id):
 @api_call(('PUT', 'POST'))
 def checklist_save(request, obra_id, week_id):
     obra = get_obra(request.user, obra_id)
-    require_editor(request.user, 'pdr')
+    require_viewer(request.user, "pdr", obra)
+    require_editor(request.user, 'pdr', obra=obra)
     week = get_object_or_404(m.Semana, pk=week_id, obra=obra)
     data = input_data(request)
     entries = data.get('rows')
@@ -291,18 +295,20 @@ def checklist_save(request, obra_id, week_id):
 @api_call()
 def avance(request, obra_id):
     obra = get_obra(request.user, obra_id)
+    require_viewer(request.user, "avance", obra)
     curves = s.curves_for(obra, svg=False)
     activities = list(m.Actividad.objects.filter(obra=obra).order_by('orden'))
     return response({'curves': avance_tabs(curves), 'activities': activity_rows(activities),
                      'weighted': weighted_progress(list(m.Actividad.objects.filter(obra=obra).values())),
                      'point_schema': form_schema(f.PuntoForm()),
-                     'editable': can_edit(request.user, 'avance')})
+                     'editable': can_edit(request.user, 'avance', obra=obra)})
 
 
 @api_call(('POST', 'PUT'))
 def point_save(request, obra_id, curve_id):
     obra = get_obra(request.user, obra_id)
-    require_editor(request.user, 'avance')
+    require_viewer(request.user, "avance", obra)
+    require_editor(request.user, 'avance', obra=obra)
     curve = get_object_or_404(m.Curva, obra=obra, pk=curve_id)
     data = input_data(request)
     week = data.get('semana')
@@ -330,22 +336,24 @@ def resource_meta(module):
 def resources(request, obra_id, module):
     obra = get_obra(request.user, obra_id)
     model, formclass, permission = resource_meta(module)
+    require_viewer(request.user, permission, obra)
     rows = model.objects.filter(obra=obra).order_by('-pk')
     if module == 'rdi' and request.GET.get('estado') in ('pendiente', 'incompleta', 'respondida'):
         rows = rows.filter(estado=request.GET['estado'])
     return response({'results': list(rows[:1000]), 'schema': form_schema(formclass()),
-                     'editable': can_edit(request.user, permission)})
+                     'editable': can_edit(request.user, permission, obra=obra)})
 
 
 @api_call(('GET', 'POST', 'PUT', 'DELETE'))
 def resource(request, obra_id, module, pk=None):
     obra = get_obra(request.user, obra_id)
     model, formclass, permission = resource_meta(module)
+    require_viewer(request.user, permission, obra)
     obj = get_object_or_404(model, obra=obra, pk=pk) if pk else None
     if request.method == 'GET':
         return response({'record': obj, 'schema': form_schema(formclass(instance=obj)),
-                         'editable': can_edit(request.user, permission)})
-    require_editor(request.user, permission)
+                         'editable': can_edit(request.user, permission, obra=obra)})
+    require_editor(request.user, permission, obra=obra, action=('delete' if request.method == 'DELETE' else 'create' if pk is None else 'edit'))
     if module == 'actividad' and not pk:
         raise Http404
     if request.method == 'DELETE':
@@ -361,11 +369,12 @@ def resource(request, obra_id, module, pk=None):
 @api_call()
 def photos(request, obra_id):
     obra = get_obra(request.user, obra_id)
+    require_viewer(request.user, "fotos", obra)
     rows = m.Foto.objects.filter(obra=obra).order_by('-fecha', '-created_at')
     etiqueta = request.GET.get('etiqueta')
     if etiqueta in dict(m.Foto._meta.get_field('etiqueta').choices):
         rows = rows.filter(etiqueta=etiqueta)
-    return response({'photos': list(rows[:500]), 'editable': can_edit(request.user, 'fotos'),
+    return response({'photos': list(rows[:500]), 'editable': can_edit(request.user, 'fotos', obra=obra),
                      'choices': m.Foto._meta.get_field('etiqueta').choices,
                      'upload': form_schema(f.UploadForm())})
 
@@ -373,7 +382,8 @@ def photos(request, obra_id):
 @api_call(('POST',))
 def upload_photos(request, obra_id):
     obra = get_obra(request.user, obra_id)
-    require_editor(request.user, 'fotos')
+    require_viewer(request.user, "fotos", obra)
+    require_editor(request.user, 'fotos', obra=obra, action='create')
     form = f.UploadForm(request.POST)
     if not form.is_valid():
         return response({'errors': form.errors.get_json_data()}, 400)
@@ -384,8 +394,9 @@ def upload_photos(request, obra_id):
 @api_call(('GET', 'POST'))
 def reports(request, obra_id):
     obra = get_obra(request.user, obra_id)
+    require_viewer(request.user, "informes", obra)
     if request.method == 'POST':
-        require_editor(request.user, 'informes')
+        require_editor(request.user, 'informes', obra=obra, action='create')
         data = input_data(request)
         week = get_object_or_404(m.Semana, pk=data.get('semana'), obra=obra)
         previous = m.Informe.objects.filter(obra=obra).order_by('-fecha_corte').first()
@@ -398,19 +409,20 @@ def reports(request, obra_id):
     counts = s.report_photo_counts(obra, rows)
     return response({'reports': [{**primitive(row), 'photo_count': counts.get(row.pk, 0)} for row in rows],
                      'weeks': list(m.Semana.objects.filter(obra=obra).order_by('-numero')),
-                     'editable': can_edit(request.user, 'informes')})
+                     'editable': can_edit(request.user, 'informes', obra=obra)})
 
 
 @api_call(('GET', 'PUT', 'DELETE', 'POST'))
 def report_detail(request, obra_id, pk):
     obra = get_obra(request.user, obra_id)
+    require_viewer(request.user, "informes", obra)
     report = get_object_or_404(m.Informe.objects.select_related('semana'), pk=pk, obra=obra)
     if request.method == 'GET':
         batch = s.report_photos(report)
         return response({'report': report, 'schema': form_schema(f.InformeForm(instance=report)),
                          'batch': batch, 'facts': report_facts(s.obra_summary(obra, report.semana, report.fecha_corte, svg=False), batch),
-                         'editable': can_edit(request.user, 'informes') and report.estado != 'emitido'})
-    require_editor(request.user, 'informes')
+                         'editable': can_edit(request.user, 'informes', obra=obra) and report.estado != 'emitido'})
+    require_editor(request.user, 'informes', obra=obra, action='approve' if request.method == 'POST' and input_data(request).get('action') in ('emit', 'reopen') else 'edit')
     if request.method == 'DELETE':
         report.delete()
         return response({'ok': True})
@@ -458,6 +470,7 @@ def report_detail(request, obra_id, pk):
 @api_call()
 def report_pdf(request, obra_id, pk):
     obra = get_obra(request.user, obra_id)
+    require_viewer(request.user, "informes", obra)
     report = get_object_or_404(m.Informe, pk=pk, obra=obra)
     if not report.pdf_path:
         return response({'error': 'Informe todavía no emitido'}, 404)
