@@ -27,6 +27,8 @@ INSTALLED_APPS = [
     "django.contrib.staticfiles",
     "django.contrib.humanize",
     "intranet",
+    # Sistema nuevo de roles y permisos
+    "apps.authorization.apps.AuthorizationConfig",
 ]
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
