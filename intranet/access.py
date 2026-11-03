@@ -28,6 +28,8 @@ def uses_rbac(user):
 
 
 def visible_modules(user):
+    if not getattr(user, "is_authenticated", False) or not user.is_active:
+        return []
     if not uses_rbac(user) and user.rol == "experto_pdr":
         return [(slug, label) for slug, label in MODULES if slug in PDR_MODULES]
     if uses_rbac(user):
@@ -83,7 +85,7 @@ WRITE_ACTIONS = {
     'adicionales': {'create': 'adicionales.editar', 'edit': 'adicionales.editar', 'delete': 'adicionales.editar'},
     'rdi': {'create': 'rdi.editar', 'edit': 'rdi.editar', 'delete': 'rdi.editar'},
     'fotos': {'create': 'fotos.crear', 'edit': None, 'delete': 'fotos.eliminar'},
-    'informes': {'create': 'informes.crear', 'edit': None, 'delete': None, 'approve': 'informes.aprobar'},
+    'informes': {'create': 'informes.crear', 'edit': 'informes.editar', 'delete': 'informes.eliminar', 'approve': 'informes.aprobar', 'download': 'informes.descargar'},
 }
 
 
@@ -93,16 +95,32 @@ def _rbac_permission(user, module, obra, action):
     codigo = f'{module}.ver' if action == 'view' else WRITE_ACTIONS.get(module, {}).get(action)
     if not codigo or obra is None:
         return False
-    enlace = EmpresaObra.objects.filter(obra=obra, empresa__activa=True).first()
-    return bool(enlace and has_permission(user=user, permission=codigo,
-              empresa_id=enlace.empresa_id, obra_id=obra.pk))
+    # EmpresaObra.obra es OneToOne: una obra solo puede pertenecer a una
+    # empresa. No seleccionar una empresa arbitraria ni permitir obras huérfanas.
+    empresa_id = EmpresaObra.objects.filter(
+        obra=obra, empresa__activa=True
+    ).values_list('empresa_id', flat=True).first()
+    return bool(empresa_id and has_permission(
+        user=user, permission=codigo, empresa_id=empresa_id, obra_id=obra.pk
+    ))
+
+
+def _legacy_can_access_obra(user, obra):
+    if obra is None:
+        return False
+    if user.rol == 'gerencia':
+        return True
+    return ObraUsuario.objects.filter(user=user, obra_id=obra.pk).exists()
 
 
 def can_view(user, module, obra):
+    if not getattr(user, 'is_authenticated', False) or not user.is_active:
+        return False
     if uses_rbac(user):
         return _rbac_permission(user, module, obra, 'view')
-    # La visibilidad legacy sigue determinada por get_obra() y sus rutas antiguas.
-    return True
+    if not _legacy_can_access_obra(user, obra):
+        return False
+    return user.rol != 'experto_pdr' or module in PDR_MODULES
 
 
 def require_viewer(user, module, obra):
@@ -111,10 +129,16 @@ def require_viewer(user, module, obra):
 
 
 def can_edit(user, module, obra=None, action='edit'):
+    if not getattr(user, 'is_authenticated', False) or not user.is_active:
+        return False
     if uses_rbac(user):
         return _rbac_permission(user, module, obra, action)
     if module == 'ventas':
         return user.rol == 'gerencia'
+    # Compatibilidad para algunos tests y consumidores internos que no entregan
+    # obra, pero nunca validar una operación concreta sobre otra obra.
+    if obra is not None and not _legacy_can_access_obra(user, obra):
+        return False
     return user.rol in ('gerencia', 'admin_obra') or (
         user.rol == 'experto_pdr' and module in ('pdr', 'fotos')
     )

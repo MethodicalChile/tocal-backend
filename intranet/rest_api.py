@@ -22,7 +22,7 @@ from django.utils import timezone
 from django.views.decorators.http import require_http_methods
 
 from . import models as m, forms as f, services as s, private_storage as storage
-from .access import get_obra, visible_obras, visible_modules, can_edit, require_editor, require_viewer
+from .access import get_obra, visible_obras, visible_modules, can_edit, require_editor, require_viewer, uses_rbac
 from .calculations import sales_dashboard, extras_summary, rdi_summary, photo_summary, weighted_progress
 from .presentation import (obra_cards, obra_overview, obra_header, pdr_overview, checklist_sections,
     staffing_chart_data, accidents_chart_data, safety_rows, avance_tabs, activity_rows,
@@ -147,7 +147,12 @@ def private_file(request, key):
     obj = m.Foto.objects.filter(storage_path=key).first() or m.Informe.objects.filter(pdf_path=key).first()
     if not obj:
         raise Http404
-    get_obra(request.user, obj.obra_id)
+    obra = get_obra(request.user, obj.obra_id)
+    if isinstance(obj, m.Foto):
+        require_viewer(request.user, 'fotos', obra)
+    else:
+        require_viewer(request.user, 'informes', obra)
+        require_editor(request.user, 'informes', obra=obra, action='download') if uses_rbac(request.user) else None
     try:
         payload = storage.read_bytes(key)
     except (ValidationError, FileNotFoundError, httpx.HTTPError):
@@ -199,7 +204,8 @@ def dashboard(request):
     obras = list(visible_obras(request.user))
     summaries = [s.obra_summary(o, svg=False) for o in obras]
     today = timezone.localdate()
-    sales = sales_dashboard(list(m.Venta.objects.values()), today.year) if request.user.rol == 'gerencia' else None
+    sales = (sales_dashboard(list(m.Venta.objects.values()), today.year)
+             if _can_access_global_sales(request.user, write=False) else None)
     curves = [entry['curves'][0]['state'] for entry in summaries if entry['curves'] and entry['curves'][0]['state']]
     return response({'cards': obra_cards(summaries, s.obra_rubros(obras) if obras else {}),
                      'active': sum(o.activa for o in obras),
@@ -213,6 +219,7 @@ def dashboard(request):
 @api_call()
 def obra_summary(request, obra_id):
     obra = get_obra(request.user, obra_id)
+    require_viewer(request.user, 'resumen', obra)
     summary = s.obra_summary(obra, svg=False)
     late = list(m.Actividad.objects.filter(obra=obra, status='atraso', es_resumen=False)
                 .order_by('orden').values_list('descripcion', flat=True))
@@ -276,7 +283,7 @@ def checklist_save(request, obra_id, week_id):
     entries = data.get('rows')
     ids = list(m.ChecklistItem.objects.filter(activo=True).values_list('pk', flat=True))
     if (not isinstance(entries, list) or len(entries) != len(ids)
-            or {str(x.get('id')) for x in entries if isinstance(x, dict)} != set(ids)):
+            or {str(x.get('id')) for x in entries if isinstance(x, dict)} != {str(i) for i in ids}):
         return response({'error': 'Debe enviar exactamente todos los ítems activos'}, 400)
     for x in entries:
         if x.get('estado') not in ('cumple', 'no_cumple', 'no_aplica') or len(str(x.get('observacion') or '')) > 500:
@@ -409,7 +416,7 @@ def reports(request, obra_id):
     counts = s.report_photo_counts(obra, rows)
     return response({'reports': [{**primitive(row), 'photo_count': counts.get(row.pk, 0)} for row in rows],
                      'weeks': list(m.Semana.objects.filter(obra=obra).order_by('-numero')),
-                     'editable': can_edit(request.user, 'informes', obra=obra)})
+                     'editable': can_edit(request.user, 'informes', obra=obra, action='edit')})
 
 
 @api_call(('GET', 'PUT', 'DELETE', 'POST'))
@@ -421,8 +428,16 @@ def report_detail(request, obra_id, pk):
         batch = s.report_photos(report)
         return response({'report': report, 'schema': form_schema(f.InformeForm(instance=report)),
                          'batch': batch, 'facts': report_facts(s.obra_summary(obra, report.semana, report.fecha_corte, svg=False), batch),
-                         'editable': can_edit(request.user, 'informes', obra=obra) and report.estado != 'emitido'})
-    require_editor(request.user, 'informes', obra=obra, action='approve' if request.method == 'POST' and input_data(request).get('action') in ('emit', 'reopen') else 'edit')
+                         'editable': can_edit(request.user, 'informes', obra=obra, action='edit') and report.estado != 'emitido'})
+    action_name = input_data(request).get('action') if request.method == 'POST' else None
+    if request.method == 'POST' and action_name in ('emit', 'reopen'):
+        require_editor(request.user, 'informes', obra=obra, action='approve')
+    elif request.method == 'POST' and action_name in ('photo', 'reset_photos'):
+        require_editor(request.user, 'informes', obra=obra, action='create')
+    elif request.method == 'DELETE':
+        require_editor(request.user, 'informes', obra=obra, action='delete')
+    else:
+        require_editor(request.user, 'informes', obra=obra, action='edit')
     if request.method == 'DELETE':
         report.delete()
         return response({'ok': True})
@@ -471,6 +486,8 @@ def report_detail(request, obra_id, pk):
 def report_pdf(request, obra_id, pk):
     obra = get_obra(request.user, obra_id)
     require_viewer(request.user, "informes", obra)
+    if uses_rbac(request.user):
+        require_editor(request.user, 'informes', obra=obra, action='download')
     report = get_object_or_404(m.Informe, pk=pk, obra=obra)
     if not report.pdf_path:
         return response({'error': 'Informe todavía no emitido'}, 404)
@@ -482,6 +499,23 @@ def report_pdf(request, obra_id, pk):
     output['Content-Disposition'] = f'inline; filename="informe-{report.fecha_corte}.pdf"'
     output['Cache-Control'] = 'private, no-store'
     return output
+
+
+def _can_access_global_sales(user, *, write=False):
+    """Ventas carece de FK a Empresa: no mezclar membresías con datos globales.
+
+    Hasta migrar ventas a empresa, solamente la política legacy de gerencia sin
+    membresías RBAC puede acceder. Esta decisión es deliberadamente restrictiva.
+    """
+    return (bool(getattr(user, 'is_authenticated', False))
+            and bool(getattr(user, 'is_active', False))
+            and not uses_rbac(user)
+            and getattr(user, 'rol', None) == 'gerencia')
+
+
+def require_global_sales(user, *, write=False):
+    if not _can_access_global_sales(user, write=write):
+        raise PermissionDenied('Ventas globales requieren autorización específica.')
 
 
 def sales_query(request):
@@ -498,7 +532,7 @@ def sales_query(request):
 
 @api_call()
 def sales(request):
-    require_editor(request.user, 'ventas')
+    require_global_sales(request.user)
     years = list(m.Venta.objects.dates('fecha', 'year').values_list('fecha__year', flat=True).distinct())
     try:
         year = int(request.GET.get('anio') or max(years, default=timezone.localdate().year))
@@ -514,7 +548,7 @@ def sales(request):
 
 @api_call()
 def sales_docs(request):
-    require_editor(request.user, 'ventas')
+    require_global_sales(request.user)
     qs = sales_query(request).order_by('-fecha', '-numero', 'id')
     if request.GET.get('anio', '').isdigit():
         qs = qs.filter(fecha__year=int(request.GET['anio']))
@@ -534,7 +568,7 @@ def sales_docs(request):
 
 @api_call(('GET', 'POST', 'PUT', 'DELETE'))
 def sales_doc(request, pk=None):
-    require_editor(request.user, 'ventas')
+    require_global_sales(request.user)
     obj = get_object_or_404(m.Venta, pk=pk) if pk else None
     if request.method == 'GET':
         return response({'record': obj, 'schema': form_schema(f.VentaForm(instance=obj, fetch_uf=False))})
@@ -548,7 +582,7 @@ def sales_doc(request, pk=None):
 
 @api_call(('POST',))
 def sales_import(request):
-    require_editor(request.user, 'ventas')
+    require_global_sales(request.user)
     from .sales_import import import_workbook
     file = request.FILES.get('archivo')
     if file is None or file.size > 20*1024*1024 or not file.name.lower().endswith('.xlsx'):
@@ -562,7 +596,7 @@ def sales_import(request):
 
 @api_call()
 def sales_lookup(request):
-    require_editor(request.user, 'ventas')
+    require_global_sales(request.user)
     result = {}
     rut = request.GET.get('rut', '').upper().replace('.', '').strip()[:16]
     if rut:
