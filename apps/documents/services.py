@@ -248,12 +248,18 @@ def calcular_cumplimiento_trabajador(empresa_id, trabajador_id, obra_id=None, ho
     if not asignaciones:
         porcentaje = 0.0
         habilitado = False
+        estado_cumplimiento = "sin_asignacion"
+        estado_cumplimiento_label = "Sin asignación activa"
     elif total_obligatorios == 0:
         porcentaje = 100.0
         habilitado = True
+        estado_cumplimiento = "sin_requisitos_configurados"
+        estado_cumplimiento_label = "Sin requisitos configurados"
     else:
         porcentaje = round((aprobados / total_obligatorios) * 100, 1)
         habilitado = aprobados == total_obligatorios
+        estado_cumplimiento = "al_dia" if habilitado else "incumplimiento"
+        estado_cumplimiento_label = "Al día" if habilitado else "Con pendientes o incumplimiento"
 
     return {
         "trabajador_id": str(trabajador_id),
@@ -268,6 +274,8 @@ def calcular_cumplimiento_trabajador(empresa_id, trabajador_id, obra_id=None, ho
         "faltantes": faltantes,
         "porcentaje_cumplimiento": porcentaje,
         "habilitado_documentalmente": habilitado,
+        "estado_cumplimiento": estado_cumplimiento,
+        "estado_cumplimiento_label": estado_cumplimiento_label,
         "por_obra": por_obra,
         "requisitos": requisitos_evaluados,
     }
@@ -768,6 +776,10 @@ def calcular_dashboard_cumplimiento(
         total_venc_trab += comp["vencidos"]
         total_falt_trab += comp["faltantes"]
 
+        cap_pend_w = max(
+            0,
+            int(prev["capacitaciones"]["total_obligatorias"]) - int(prev["capacitaciones"]["vigentes"]),
+        )
         resumen_trabajadores.append({
             "trabajador_id": w.pk,
             "nombre": f"{w.nombres} {w.apellido_paterno} {w.apellido_materno}".strip(),
@@ -778,6 +790,7 @@ def calcular_dashboard_cumplimiento(
             "rechazados": comp["rechazados"],
             "vencidos": comp["vencidos"],
             "faltantes": comp["faltantes"],
+            "capacitaciones_pendientes": cap_pend_w,
             "habilitado_documentalmente": comp["habilitado_documentalmente"],
             "estado_preventivo": prev["estado_preventivo"],
             "estado_preventivo_label": prev["estado_label"],
@@ -788,11 +801,14 @@ def calcular_dashboard_cumplimiento(
         equipos_qs = equipos_qs.filter(asignaciones__obra_id=obra_id).distinct()
     equipos = list(equipos_qs)
     equipos_habilitados = 0
+    equipos_con_vencidos = 0
     resumen_equipos = []
     for eq in equipos:
         c_eq = calcular_cumplimiento_equipo(empresa_id, eq.pk, obra_id=obra_id, hoy=hoy)
         if c_eq["habilitado_operacion"] and eq.estado == "operativo":
             equipos_habilitados += 1
+        if c_eq["vencidos"] > 0:
+            equipos_con_vencidos += 1
         resumen_equipos.append({
             "equipo_id": str(eq.pk),
             "codigo": eq.codigo,
@@ -800,6 +816,8 @@ def calcular_dashboard_cumplimiento(
             "tipo_equipo": eq.tipo_equipo,
             "estado_operativo": eq.estado,
             "porcentaje_cumplimiento": c_eq["porcentaje_cumplimiento"],
+            "vencidos": c_eq["vencidos"],
+            "faltantes": c_eq["faltantes"],
             "habilitado_operacion": c_eq["habilitado_operacion"] and eq.estado == "operativo",
         })
 
@@ -864,6 +882,8 @@ def calcular_dashboard_cumplimiento(
             "porcentaje_cumplimiento_empresa": cumplimiento_empresa["porcentaje_cumplimiento"],
             "equipos_activos": len(resumen_equipos),
             "equipos_habilitados": equipos_habilitados,
+            "equipos_con_vencidos": equipos_con_vencidos,
+            "capacitaciones_pendientes": sum(w["capacitaciones_pendientes"] for w in resumen_trabajadores),
             "documentos_aprobados": total_aprob_trab,
             "documentos_pendientes": total_pend_trab,
             "documentos_rechazados": total_rech_trab,
