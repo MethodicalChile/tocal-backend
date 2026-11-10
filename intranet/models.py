@@ -527,3 +527,123 @@ class SolicitudPrivacidad(Record):
     class Meta:
         db_table = "tocal_solicitudes_privacidad"
         ordering = ["-created_at"]
+
+
+# Gestión laboral: independiente de cuentas de acceso y permisos RBAC.
+class Cargo(Record):
+    empresa = models.ForeignKey(
+        "authorization.Empresa", on_delete=models.PROTECT, related_name="cargos"
+    )
+    codigo = models.SlugField(max_length=64)
+    nombre = models.CharField(max_length=150)
+    descripcion = models.TextField(blank=True)
+    activo = models.BooleanField(default=True)
+
+    class Meta:
+        db_table = "tocal_cargos"
+        ordering = ["nombre"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["empresa", "codigo"], name="tocal_cargo_empresa_codigo_uniq"
+            ),
+        ]
+
+    def __str__(self):
+        return self.nombre
+
+
+class Trabajador(Record):
+    empresa = models.ForeignKey(
+        "authorization.Empresa", on_delete=models.PROTECT, related_name="trabajadores"
+    )
+    # No se exige una cuenta del sistema para registrar a un trabajador.
+    usuario = models.ForeignKey(
+        "User", on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="fichas_trabajador",
+    )
+    nombres = models.CharField(max_length=150)
+    apellido_paterno = models.CharField(max_length=100)
+    apellido_materno = models.CharField(max_length=100, blank=True)
+    rut = models.CharField(max_length=20, null=True, blank=True)
+    activo = models.BooleanField(default=True)
+    creado_en = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        db_table = "tocal_trabajadores"
+        ordering = ["apellido_paterno", "nombres"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["empresa", "rut"],
+                condition=models.Q(rut__isnull=False) & ~models.Q(rut=""),
+                name="tocal_trabajador_empresa_rut_uniq",
+            ),
+            models.UniqueConstraint(
+                fields=["empresa", "usuario"],
+                condition=models.Q(usuario__isnull=False),
+                name="tocal_trabajador_empresa_usuario_uniq",
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.nombres} {self.apellido_paterno}".strip()
+
+
+class AsignacionTrabajadorObra(Record):
+    empresa = models.ForeignKey(
+        "authorization.Empresa", on_delete=models.PROTECT,
+        related_name="asignaciones_trabajadores",
+    )
+    trabajador = models.ForeignKey(
+        "Trabajador", on_delete=models.PROTECT, related_name="asignaciones_obras"
+    )
+    obra = models.ForeignKey(
+        "Obra", on_delete=models.PROTECT, related_name="asignaciones_trabajadores"
+    )
+    cargo = models.ForeignKey(
+        "Cargo", on_delete=models.PROTECT, related_name="asignaciones_trabajadores"
+    )
+    fecha_inicio = models.DateField()
+    fecha_fin = models.DateField(null=True, blank=True)
+    observaciones = models.TextField(blank=True)
+    creado_en = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        db_table = "tocal_trabajador_obras"
+        ordering = ["-fecha_inicio"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["trabajador", "obra"],
+                condition=models.Q(fecha_fin__isnull=True),
+                name="tocal_asignacion_abierta_uniq",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(fecha_fin__isnull=True) | models.Q(fecha_fin__gte=models.F("fecha_inicio")),
+                name="tocal_asignacion_fechas_validas",
+            ),
+        ]
+
+    def clean(self):
+        from django.core.exceptions import ValidationError
+        from apps.authorization.models import EmpresaObra
+
+        super().clean()
+        errores = {}
+        if self.fecha_fin and self.fecha_inicio and self.fecha_fin < self.fecha_inicio:
+            errores["fecha_fin"] = "No puede ser anterior al inicio."
+        if self.empresa_id and self.trabajador_id and self.trabajador.empresa_id != self.empresa_id:
+            errores["trabajador"] = "El trabajador pertenece a otra empresa."
+        if self.empresa_id and self.cargo_id and self.cargo.empresa_id != self.empresa_id:
+            errores["cargo"] = "El cargo pertenece a otra empresa."
+        if self.empresa_id and self.obra_id and not EmpresaObra.objects.filter(
+            empresa_id=self.empresa_id, obra_id=self.obra_id
+        ).exists():
+            errores["obra"] = "La obra no está vinculada a esta empresa."
+        if errores:
+            raise ValidationError(errores)
+
+    def save(self, *args, **kwargs):
+        self.full_clean()
+        return super().save(*args, **kwargs)
+
+    def __str__(self):
+        return f"{self.trabajador} / {self.obra} / {self.cargo}"

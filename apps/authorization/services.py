@@ -33,6 +33,7 @@ def assign_role(*, usuario, empresa, rol, obra=None):
         membresia=membresia, rol=rol, empresa_obra=vinculo,
         defaults={"activa": True},
     )
+    # Al reactivar también verificamos integridad del ámbito mediante save/full_clean.
     if not asignacion.activa:
         asignacion.activa = True
         asignacion.save(update_fields=["activa"])

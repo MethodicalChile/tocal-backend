@@ -94,10 +94,59 @@ def members_list(request, empresa_id):
         return JsonResponse({'error': 'Sin acceso'}, status=403)
     qs = MembresiaEmpresa.objects.filter(empresa=empresa).select_related('usuario').order_by('usuario_id')
     return JsonResponse({'results': [
-        {'id': str(m.pk), 'usuario_id': m.usuario_id,
-         'username': m.usuario.get_username(), 'activa': m.activa}
+        {
+            'id': str(m.pk),
+            'usuario_id': m.usuario_id,
+            'username': m.usuario.get_username(),
+            'name': getattr(m.usuario, 'name', '') or m.usuario.get_username(),
+            'email': getattr(m.usuario, 'email', ''),
+            'activa': m.activa,
+            'permisos_efectivos': sorted(effective_permissions(user=m.usuario, empresa_id=empresa.pk)) if m.activa else [],
+        }
         for m in qs
     ]})
+
+
+@route(['PATCH'])
+def member_detail(request, empresa_id, membresia_id):
+    """Activar o desactivar membresía de un usuario en la empresa protegiendo al último administrador (T2.2)."""
+    data = payload(request)
+    if set(data) != {'activa'} or not isinstance(data.get('activa'), bool):
+        raise ValueError('Se requiere el campo booleano activa')
+    with transaction.atomic():
+        empresa = Empresa.objects.select_for_update().filter(pk=empresa_id, activa=True).first()
+        if not empresa or not (
+            can_admin(request.user, empresa)
+            or has_permission(user=request.user, empresa_id=empresa_id, permission='usuarios.editar')
+        ):
+            return JsonResponse({'error': 'Sin acceso'}, status=403)
+        member = (
+            MembresiaEmpresa.objects.select_for_update()
+            .select_related('usuario')
+            .filter(pk=membresia_id, empresa=empresa)
+            .first()
+        )
+        if member is None:
+            return JsonResponse({'error': 'Membresía no encontrada'}, status=404)
+        member.activa = data['activa']
+        member.save(update_fields=['activa'])
+        if not has_company_admin(empresa):
+            transaction.set_rollback(True)
+            return JsonResponse({'error': 'No se puede desactivar el último administrador de la empresa'}, status=409)
+        audit(
+            empresa,
+            request.user,
+            'membresia.actualizar',
+            member,
+            {'usuario_id': member.usuario_id, 'activa': member.activa},
+        )
+    return JsonResponse({
+        'id': str(member.pk),
+        'usuario_id': member.usuario_id,
+        'username': member.usuario.get_username(),
+        'name': getattr(member.usuario, 'name', '') or member.usuario.get_username(),
+        'activa': member.activa,
+    })
 
 
 @route(['POST'])

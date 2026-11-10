@@ -14,7 +14,7 @@ from django.http import JsonResponse
 from django.views.decorators.http import require_http_methods
 
 from .models import Empresa, Permiso, Rol, RolPermiso, RegistroAuditoria
-from .permissions import effective_permissions, has_permission
+from .permissions import all_company_permissions, effective_permissions, has_permission
 
 logger = logging.getLogger(__name__)
 
@@ -81,10 +81,44 @@ def permissions_list(request, empresa_id):
 @endpoint(['GET'])
 def my_permissions(request, empresa_id):
     # Esta ruta la puede usar cualquier miembro activo sin permiso administrativo.
-    permissions = sorted(effective_permissions(user=request.user, empresa_id=empresa_id))
-    if not permissions:
-        return JsonResponse({'permissions': []})
-    return JsonResponse({'permissions': permissions})
+    obra_id = request.GET.get('obra_id')
+    summary = all_company_permissions(user=request.user, empresa_id=empresa_id)
+    if obra_id is not None:
+        scoped = sorted(effective_permissions(user=request.user, empresa_id=empresa_id, obra_id=obra_id))
+        return JsonResponse({
+            'permissions': scoped,
+            'global_permissions': summary['global_permissions'],
+            'obra_permissions': summary['obra_permissions'],
+        })
+    return JsonResponse(summary)
+
+
+@endpoint(['GET'])
+def audit_logs_list(request, empresa_id):
+    empresa = _empresa(request, empresa_id, 'auditoria.ver')
+    if empresa is None:
+        return JsonResponse({'error': 'Sin acceso'}, status=403)
+    entidad = request.GET.get('entidad')
+    accion = request.GET.get('accion')
+    qs = RegistroAuditoria.objects.filter(empresa=empresa).select_related('actor').order_by('-creado_en')
+    if entidad:
+        qs = qs.filter(entidad=entidad[:80])
+    if accion:
+        qs = qs.filter(accion=accion[:80])
+    items = [
+        {
+            'id': str(entry.pk),
+            'actor_id': entry.actor_id,
+            'actor_username': entry.actor.get_username() if entry.actor else None,
+            'accion': entry.accion,
+            'entidad': entry.entidad,
+            'entidad_id': entry.entidad_id,
+            'detalle': entry.detalle,
+            'creado_en': entry.creado_en.isoformat(),
+        }
+        for entry in qs[:200]
+    ]
+    return JsonResponse({'results': items})
 
 
 @endpoint(['POST'])

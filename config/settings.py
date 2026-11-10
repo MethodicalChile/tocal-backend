@@ -1,4 +1,5 @@
 import os
+import sys
 from pathlib import Path
 
 import dj_database_url
@@ -8,7 +9,8 @@ from dotenv import load_dotenv
 BASE_DIR = Path(__file__).resolve().parent.parent
 load_dotenv(BASE_DIR / ".env")
 load_dotenv(BASE_DIR / ".env.local", override=True)
-DEBUG = os.getenv("DJANGO_DEBUG", "0") == "1"
+IS_TEST = "test" in sys.argv
+DEBUG = os.getenv("DJANGO_DEBUG", "0") == "1" or IS_TEST
 SECRET_KEY = os.getenv("DJANGO_SECRET_KEY") or os.getenv("BETTER_AUTH_SECRET")
 if not SECRET_KEY:
     if not DEBUG:
@@ -26,10 +28,12 @@ INSTALLED_APPS = [
     "django.contrib.messages",
     "django.contrib.staticfiles",
     "django.contrib.humanize",
+
     "intranet",
-    # Sistema nuevo de roles y permisos
     "apps.authorization.apps.AuthorizationConfig",
+    "apps.documents.apps.DocumentsConfig",
 ]
+
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
     "whitenoise.middleware.WhiteNoiseMiddleware",
@@ -54,13 +58,23 @@ TEMPLATES = [{
 }]
 WSGI_APPLICATION = "config.wsgi.application"
 ASGI_APPLICATION = "config.asgi.application"
-database_url = os.getenv("DATABASE_URL", f"sqlite:///{BASE_DIR / 'db.sqlite3'}" if DEBUG else "")
+use_sqlite = os.getenv("DJANGO_USE_SQLITE", "0") == "1"
+database_url = (
+    f"sqlite:///{BASE_DIR / 'db.sqlite3'}"
+    if use_sqlite
+    else os.getenv("DATABASE_URL", f"sqlite:///{BASE_DIR / 'db.sqlite3'}" if DEBUG else "")
+)
 if not database_url:
     raise ImproperlyConfigured("DATABASE_URL es obligatorio con DJANGO_DEBUG=0.")
 if not DEBUG and not database_url.startswith(("postgres://", "postgresql://")):
     raise ImproperlyConfigured("Producción requiere PostgreSQL (Supabase).")
 DATABASES = {"default": dj_database_url.parse(database_url, conn_max_age=0)}
-if DATABASES["default"]["ENGINE"] == "django.db.backends.postgresql":
+if "test" in sys.argv and os.getenv("DJANGO_TEST_USE_PROD_DB", "0") != "1":
+    DATABASES["default"] = {
+        "ENGINE": "django.db.backends.sqlite3",
+        "NAME": ":memory:",
+    }
+elif DATABASES["default"]["ENGINE"] == "django.db.backends.postgresql":
     DATABASES["default"].setdefault("OPTIONS", {})["sslmode"] = os.getenv("DB_SSLMODE", "require")
     # Para conexiones vía transaction pooler de Supabase: no guardar conexiones de sesión.
     DATABASES["default"]["CONN_MAX_AGE"] = 0
@@ -91,7 +105,7 @@ STORAGES = {
     "staticfiles": {"BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage"},
 }
 MEDIA_ROOT = Path(os.getenv("STORAGE_DIR", str(BASE_DIR / "storage"))).resolve()
-STORAGE_BACKEND = os.getenv("STORAGE_BACKEND", "local")
+STORAGE_BACKEND = "local" if ("test" in sys.argv and os.getenv("DJANGO_TEST_USE_SUPABASE", "0") != "1") else os.getenv("STORAGE_BACKEND", "local")
 SUPABASE_URL = os.getenv("SUPABASE_URL", "")
 # Preferir claves sb_secret_* modernas; service_role JWT solo por compatibilidad.
 SUPABASE_SECRET_KEY = os.getenv("SUPABASE_SECRET_KEY", "")
@@ -129,8 +143,30 @@ SESSION_COOKIE_AGE = int(os.getenv("SESSION_COOKIE_AGE", "28800"))
 SESSION_EXPIRE_AT_BROWSER_CLOSE = True
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https") if os.getenv("TRUST_PROXY_HEADERS", "0") == "1" else None
 
+DOCUMENTS_PRIVATE_ROOT = MEDIA_ROOT / "private" / "documents"
+
+
+DOCUMENTS_MAX_FILE_SIZE = 10 * 1024 * 1024
+
 if not DEBUG:
-    if SECRET_KEY.startswith(("REEMPLAZAR", "django-insecure")) or len(SECRET_KEY) < 40:
-        raise ImproperlyConfigured("Genera DJANGO_SECRET_KEY largo y aleatorio para producción.")
-    if not SUPABASE_URL.startswith("https://") or not SUPABASE_STORAGE_KEY or SUPABASE_STORAGE_KEY.startswith("REEMPLAZAR"):
-        raise ImproperlyConfigured("Configura las credenciales privadas de Supabase antes de desplegar.")
+    if (
+        SECRET_KEY.startswith(("REEMPLAZAR", "django-insecure"))
+        or len(SECRET_KEY) < 40
+    ):
+        raise ImproperlyConfigured(
+            "Genera DJANGO_SECRET_KEY largo y aleatorio para producción."
+        )
+
+    if STORAGE_BACKEND != "supabase":
+        raise ImproperlyConfigured(
+            "Producción requiere STORAGE_BACKEND=supabase."
+        )
+
+    if (
+        not SUPABASE_URL.startswith("https://")
+        or not SUPABASE_STORAGE_KEY
+        or SUPABASE_STORAGE_KEY.startswith("REEMPLAZAR")
+    ):
+        raise ImproperlyConfigured(
+            "Configura las credenciales privadas de Supabase."
+        )

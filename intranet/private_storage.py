@@ -70,3 +70,28 @@ def delete(key):
         _request("DELETE", key)
     else:
         local_path(key).unlink(missing_ok=True)
+
+
+def verify_configuration():
+    """Verifica la configuración de almacenamiento sin exponer secretos."""
+    backend = getattr(settings, "STORAGE_BACKEND", "local")
+    if backend != "supabase":
+        root = settings.MEDIA_ROOT.resolve()
+        return {
+            "backend": "local",
+            "configured": True,
+            "media_root_exists": root.exists(),
+            "public_exposure": False,
+        }
+    has_url = bool(getattr(settings, "SUPABASE_URL", "").startswith("https://"))
+    has_key = bool(getattr(settings, "SUPABASE_STORAGE_KEY", ""))
+    bucket = getattr(settings, "SUPABASE_STORAGE_BUCKET", "")
+    return {
+        "backend": "supabase",
+        "configured": bool(has_url and has_key and bucket),
+        "https_url": has_url,
+        "has_secret_key": has_key,
+        "bucket": bucket,
+        "public_exposure": False,
+    }
+

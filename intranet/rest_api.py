@@ -196,6 +196,7 @@ def signout(request):
 def session(request):
     u = request.user
     return response({'id': u.pk, 'name': u.name, 'email': u.email, 'role': u.rol,
+                     'rbac': uses_rbac(u),
                      'modules': visible_modules(u), 'obras': [primitive(x) for x in visible_obras(u)]})
 
 
@@ -416,7 +417,7 @@ def reports(request, obra_id):
     counts = s.report_photo_counts(obra, rows)
     return response({'reports': [{**primitive(row), 'photo_count': counts.get(row.pk, 0)} for row in rows],
                      'weeks': list(m.Semana.objects.filter(obra=obra).order_by('-numero')),
-                     'editable': can_edit(request.user, 'informes', obra=obra, action='edit')})
+                     'editable': can_edit(request.user, 'informes', obra=obra)})
 
 
 @api_call(('GET', 'PUT', 'DELETE', 'POST'))
@@ -428,14 +429,12 @@ def report_detail(request, obra_id, pk):
         batch = s.report_photos(report)
         return response({'report': report, 'schema': form_schema(f.InformeForm(instance=report)),
                          'batch': batch, 'facts': report_facts(s.obra_summary(obra, report.semana, report.fecha_corte, svg=False), batch),
-                         'editable': can_edit(request.user, 'informes', obra=obra, action='edit') and report.estado != 'emitido'})
+                         'editable': can_edit(request.user, 'informes', obra=obra) and report.estado != 'emitido'})
     action_name = input_data(request).get('action') if request.method == 'POST' else None
     if request.method == 'POST' and action_name in ('emit', 'reopen'):
         require_editor(request.user, 'informes', obra=obra, action='approve')
     elif request.method == 'POST' and action_name in ('photo', 'reset_photos'):
         require_editor(request.user, 'informes', obra=obra, action='create')
-    elif request.method == 'DELETE':
-        require_editor(request.user, 'informes', obra=obra, action='delete')
     else:
         require_editor(request.user, 'informes', obra=obra, action='edit')
     if request.method == 'DELETE':

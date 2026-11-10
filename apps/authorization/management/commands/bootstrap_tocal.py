@@ -93,8 +93,8 @@ class Command(BaseCommand):
                 raise CommandError("Ya existe un rol administrador incompatible; revisar manualmente.")
             if rol_existente:
                 actuales = set(rol_existente.permisos_asignados.values_list("permiso__codigo", flat=True))
-                if actuales != codigos:
-                    raise CommandError("El rol administrador existente no coincide con el catálogo. No se modificará implícitamente.")
+                if actuales - codigos:
+                    raise CommandError("El rol administrador existente contiene permisos fuera del catálogo activo. No se modificará implícitamente.")
 
         self.stdout.write("=== VISTA PREVIA bootstrap_tocal ===")
         self.stdout.write(f"Usuario: {usuario.username} (id={usuario.pk})")
@@ -122,8 +122,11 @@ class Command(BaseCommand):
             existentes = set(rol.permisos_asignados.values_list("permiso__codigo", flat=True))
             if nuevo_rol:
                 RolPermiso.objects.bulk_create([RolPermiso(rol=rol, permiso=p) for p in Permiso.objects.filter(activo=True)])
-            elif existentes != codigos:
+            elif existentes - codigos:
                 raise CommandError("Rol existente alterado: no se modificará implícitamente.")
+            elif codigos - existentes:
+                faltantes = Permiso.objects.filter(activo=True, codigo__in=(codigos - existentes))
+                RolPermiso.objects.bulk_create([RolPermiso(rol=rol, permiso=p) for p in faltantes])
             membresia, _ = MembresiaEmpresa.objects.get_or_create(
                 empresa=empresa, usuario=usuario, defaults={"activa": True},
             )

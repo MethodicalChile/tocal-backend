@@ -1,8 +1,16 @@
 from django.urls import path
 from . import rest_api as a
 from . import privacy_api
+from . import workforce_api as w
 
 urlpatterns = [
+    path('empresas/<uuid:empresa_id>/cargos', w.cargos),
+    path('empresas/<uuid:empresa_id>/cargos/catalogo-tocal', w.seed_tocal_cargos),
+    path('empresas/<uuid:empresa_id>/cargos/<str:cargo_id>', w.cargo_detail),
+    path('empresas/<uuid:empresa_id>/trabajadores', w.trabajadores),
+    path('empresas/<uuid:empresa_id>/trabajadores/<str:trabajador_id>', w.trabajador_detail),
+    path('empresas/<uuid:empresa_id>/obras/<str:obra_id>/trabajadores/asignaciones', w.asignaciones),
+    path('empresas/<uuid:empresa_id>/obras/<str:obra_id>/trabajadores/asignaciones/<str:asignacion_id>', w.asignacion_detail),
     path('health', a.health),
     path('csrf', a.csrf),
     path('auth/login', a.signin),
