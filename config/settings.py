@@ -75,6 +75,20 @@ if "test" in sys.argv and os.getenv("DJANGO_TEST_USE_PROD_DB", "0") != "1":
         "NAME": ":memory:",
     }
 elif DATABASES["default"]["ENGINE"] == "django.db.backends.postgresql":
+    import socket
+
+    db_host = DATABASES["default"].get("HOST") or ""
+    if db_host.startswith("db.") and db_host.endswith(".supabase.co"):
+        try:
+            socket.getaddrinfo(db_host, DATABASES["default"].get("PORT") or 5432)
+        except socket.gaierror:
+            project_ref = db_host[len("db."):-len(".supabase.co")]
+            pooler_host = os.getenv("SUPABASE_POOLER_HOST", "aws-1-sa-east-1.pooler.supabase.com")
+            DATABASES["default"]["HOST"] = pooler_host
+            DATABASES["default"]["PORT"] = int(os.getenv("SUPABASE_POOLER_PORT", "5432"))
+            db_user = DATABASES["default"].get("USER") or "postgres"
+            if "." not in db_user:
+                DATABASES["default"]["USER"] = f"{db_user}.{project_ref}"
     DATABASES["default"].setdefault("OPTIONS", {})["sslmode"] = os.getenv("DB_SSLMODE", "require")
     # Para conexiones vía transaction pooler de Supabase: no guardar conexiones de sesión.
     DATABASES["default"]["CONN_MAX_AGE"] = 0
