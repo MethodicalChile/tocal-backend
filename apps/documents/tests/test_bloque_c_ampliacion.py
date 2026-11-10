@@ -359,3 +359,24 @@ class BloqueCAmpliacionTests(TestCase):
         self.assertEqual(res_csv.status_code, 200)
         self.assertEqual(res_csv['Content-Type'], 'text/csv; charset=utf-8')
 
+    def test_sembrar_catalogos_base_tocal_idempotente(self):
+        res_1 = self.client.post(f'/api/documentos/empresas/{self.empresa.id}/sembrar-catalogos-tocal/')
+        self.assertEqual(res_1.status_code, 200)
+        data_1 = res_1.json()
+        self.assertGreaterEqual(data_1['cargos_creados'], 15)
+        self.assertGreaterEqual(data_1['tipos_documentales_creados'], 15)
+        self.assertGreaterEqual(data_1['requisitos_documentales_creados'], 50)
+        self.assertGreaterEqual(data_1['tipos_capacitacion_creados'], 6)
+        self.assertGreaterEqual(data_1['categorias_epp_creadas'], 7)
+
+        # Segunda ejecución debe ser idempotente (0 duplicados)
+        res_2 = self.client.post(f'/api/documentos/empresas/{self.empresa.id}/sembrar-catalogos-tocal/')
+        self.assertEqual(res_2.status_code, 200)
+        data_2 = res_2.json()
+        self.assertEqual(data_2['cargos_creados'], 0)
+        self.assertEqual(data_2['tipos_documentales_creados'], 0)
+        self.assertEqual(data_2['requisitos_documentales_creados'], 0)
+        self.assertEqual(data_2['tipos_capacitacion_creados'], 0)
+        self.assertEqual(data_2['categorias_epp_creadas'], 0)
+
+

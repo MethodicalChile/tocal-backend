@@ -44,4 +44,5 @@ urlpatterns = [
     # Etapa 10: Dashboard y exportación de cumplimiento
     path('empresas/<uuid:empresa_id>/dashboard-cumplimiento/', views_extended.dashboard_cumplimiento, name='documentos-dashboard-cumplimiento'),
     path('empresas/<uuid:empresa_id>/exportar-cumplimiento/', views_extended.exportar_cumplimiento_csv, name='documentos-exportar-cumplimiento'),
+    path('empresas/<uuid:empresa_id>/sembrar-catalogos-tocal/', views_extended.sembrar_catalogos_tocal_view, name='documentos-sembrar-catalogos-tocal'),
 ]

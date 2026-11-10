@@ -1221,3 +1221,22 @@ def exportar_cumplimiento_csv(request, empresa_id):
     response['Content-Disposition'] = f'attachment; filename="cumplimiento_tocal_{data["fecha_corte"]}.csv"'
     return response
 
+
+@require_http_methods(['POST'])
+def sembrar_catalogos_tocal_view(request, empresa_id):
+    if _unauthenticated(request):
+        return _response_error('Autenticación requerida.', 401)
+    if not Empresa.objects.filter(pk=empresa_id, activa=True).exists():
+        return _response_error('Sin acceso.', 403)
+    if not (
+        _authorized(request, empresa_id, 'tipos_documentales.crear')
+        or _authorized(request, empresa_id, 'documentos.crear')
+        or _authorized(request, empresa_id, 'cargos.crear')
+    ):
+        return _response_error('Sin acceso para poblar catálogos base.', 403)
+    from .seed_tocal import sembrar_catalogos_base_tocal
+
+    resumen = sembrar_catalogos_base_tocal(empresa_id, actor=request.user)
+    return JsonResponse(resumen)
+
+
