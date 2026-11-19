@@ -445,6 +445,8 @@ def revisar_documento_trabajador(request, empresa_id, trabajador_id, documento_i
         data = _payload(request)
         _fields(data, {'estado', 'observaciones', 'motivo_rechazo', 'archivo_id'})
         estado = data.get('estado')
+        if estado == 'en_revision':
+            estado = 'pendiente'
         if estado not in ('pendiente', 'aprobado', 'rechazado'):
             raise ValueError('Estado inválido.')
         observaciones = data.get('observaciones', item.observaciones)

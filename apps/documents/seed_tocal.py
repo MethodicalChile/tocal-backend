@@ -94,6 +94,13 @@ TIPOS_DOCUMENTALES_TOCAL = [
         "descripcion": "Licencia municipal vigente acorde al vehículo o maquinaria pesada asignada.",
         "requiere_vencimiento": True,
     },
+    {
+        "codigo": "vigilancia-minsal-planesi-prexor",
+        "nombre": "Certificado Vigilancia de Salud Protocolos MINSAL (PLANESI Sílice / PREXOR Ruido)",
+        "categoria": "trabajador",
+        "descripcion": "Constancia de evaluación médica ocupacional de programas de vigilancia MINSAL (sílice, ruido, radiación UV, TMERT).",
+        "requiere_vencimiento": True,
+    },
     # --- EMPRESA ---
     {
         "codigo": "riohs-empresa",
@@ -149,6 +156,62 @@ TIPOS_DOCUMENTALES_TOCAL = [
         "nombre": "PTS-06 Procedimiento de Trabajo Seguro: Enfierradura y Moldajes",
         "categoria": "empresa",
         "descripcion": "Procedimiento técnico versionado para corte, doblado, colocación de acero y moldajes.",
+        "requiere_vencimiento": True,
+    },
+    {
+        "codigo": "pts-instalaciones-electricas",
+        "nombre": "PTS-07 Procedimiento de Trabajo Seguro: Instalaciones Eléctricas Provisorias y Código de Colores",
+        "categoria": "empresa",
+        "descripcion": "Procedimiento técnico firmado por Gerencia y PDR para instalaciones eléctricas provisorias y código de colores en faena.",
+        "requiere_vencimiento": True,
+    },
+    {
+        "codigo": "pts-conduccion-vehiculos",
+        "nombre": "PTS-08 Procedimiento de Trabajo Seguro: Conducción de Vehículos y Operación de Maquinaria",
+        "categoria": "empresa",
+        "descripcion": "Procedimiento técnico de conducción segura, segregación vial y check-list diario de vehículos y equipos móviles.",
+        "requiere_vencimiento": True,
+    },
+    {
+        "codigo": "pts-trabajo-caliente-soldadura",
+        "nombre": "PTS-09 Procedimiento de Trabajo Seguro: Trabajo en Caliente, Soldadura y Esmeril Angular",
+        "categoria": "empresa",
+        "descripcion": "Procedimiento técnico para soldadura al arco, oxicorte, uso de esmeril angular y prevención de incendios.",
+        "requiere_vencimiento": True,
+    },
+    {
+        "codigo": "pts-orden-aseo-residuos",
+        "nombre": "PTS-10 Procedimiento de Trabajo Seguro: Orden, Aseo, Sanitización y Acopio de Residuos",
+        "categoria": "empresa",
+        "descripcion": "Procedimiento técnico de orden y limpieza de instalaciones de faena, comedores, baños y retiro de escombros.",
+        "requiere_vencimiento": True,
+    },
+    {
+        "codigo": "protocolo-minsal-planesi",
+        "nombre": "Protocolo MINSAL PLANESI — Vigilancia y Control de Exposición a Sílice",
+        "categoria": "empresa",
+        "descripcion": "Programa preventivo y mediciones ambientales/cuantitativas de exposición a sílice libre cristalizada en obra.",
+        "requiere_vencimiento": True,
+    },
+    {
+        "codigo": "protocolo-minsal-prexor",
+        "nombre": "Protocolo MINSAL PREXOR — Exposición Ocupacional a Ruido",
+        "categoria": "empresa",
+        "descripcion": "Matriz de exposición a ruido ocupacional, dosimetrías y programa de conservación auditiva.",
+        "requiere_vencimiento": True,
+    },
+    {
+        "codigo": "protocolo-minsal-ruvs",
+        "nombre": "Protocolo MINSAL RUVS — Radiación Ultravioleta de Origen Solar",
+        "categoria": "empresa",
+        "descripcion": "Programa de protección contra radiación UV solar, publicación diaria de índice UV y provisión de elementos protectores.",
+        "requiere_vencimiento": True,
+    },
+    {
+        "codigo": "protocolo-minsal-tmert-ceal",
+        "nombre": "Protocolos MINSAL TMERT (Musculoesquelético) y CEAL-SM / ISTAS21 (Psicosocial)",
+        "categoria": "empresa",
+        "descripcion": "Evaluación de trastornos musculoesqueléticos de extremidades superiores, manejo manual de carga (MMC) y riesgos psicosociales.",
         "requiere_vencimiento": True,
     },
     {
@@ -305,6 +368,38 @@ CAPACITACIONES_TOCAL = [
         "requiere_vencimiento": True,
         "vigencia_meses": 12,
     },
+    {
+        "codigo": "pts-instalaciones-electricas-difusion",
+        "nombre": "Difusión y Evaluación PTS-07: Instalaciones Eléctricas Provisorias y Código de Colores",
+        "descripcion": "Capacitación, firma de asistencia y prueba de comprensión sobre tableros, extensiones y código de colores.",
+        "horas_sugeridas": 2,
+        "requiere_vencimiento": True,
+        "vigencia_meses": 12,
+    },
+    {
+        "codigo": "pts-trabajo-caliente-difusion",
+        "nombre": "Difusión y Evaluación PTS-09: Trabajo en Caliente, Soldadura y Esmeril Angular",
+        "descripcion": "Capacitación, firma de asistencia y prueba de comprensión para soldadores y maestros en trabajos en caliente.",
+        "horas_sugeridas": 2,
+        "requiere_vencimiento": True,
+        "vigencia_meses": 12,
+    },
+    {
+        "codigo": "protocolos-minsal-silice-ruido-uv",
+        "nombre": "Capacitación Protocolos MINSAL: Sílice (PLANESI), Ruido (PREXOR) y Radiación UV (RUVS)",
+        "descripcion": "Instrucción obligatoria sobre riesgos de exposición a polvo con sílice, ruido en obra y radiación UV solar.",
+        "horas_sugeridas": 3,
+        "requiere_vencimiento": True,
+        "vigencia_meses": 12,
+    },
+    {
+        "codigo": "ergonomia-pausas-activas-oficina",
+        "nombre": "Ergonomía, Pausas Activas y Prevención TMERT en Oficina (Personal Administrativo / Técnico)",
+        "descripcion": "Capacitación específica de ergonomía, digitación y pausas activas para puestos administrativos y de oficina técnica.",
+        "horas_sugeridas": 2,
+        "requiere_vencimiento": True,
+        "vigencia_meses": 12,
+    },
 ]
 
 CATEGORIAS_EPP_TOCAL = [
@@ -361,6 +456,22 @@ CATEGORIAS_EPP_TOCAL = [
         "nombre": "Arnés de Seguridad Cuerpo Completo + Doble Cabo de Vida",
         "descripcion": "Sistema personal para detención de caídas en trabajos sobre 1,8 metros de altura.",
         "vida_util_meses": 12,
+        "requiere_vencimiento": True,
+        "obligatorio_terreno": False,
+    },
+    {
+        "codigo": "proteccion-solar-uv",
+        "nombre": "Kit Protección Solar UV (Bloqueador FPS 50+ y Cubrenuca / Legionario — RUVS)",
+        "descripcion": "Elementos obligatorios del Protocolo MINSAL RUVS para exposición directa a radiación solar en obra.",
+        "vida_util_meses": 6,
+        "requiere_vencimiento": True,
+        "obligatorio_terreno": False,
+    },
+    {
+        "codigo": "proteccion-respiratoria-silice",
+        "nombre": "Respirador Medio Rostro Doble Vía con Filtros P100 (Protocolo PLANESI Sílice)",
+        "descripcion": "Protección respiratoria certificada contra polvo en suspensión y sílice libre cristalizada.",
+        "vida_util_meses": 6,
         "requiere_vencimiento": True,
         "obligatorio_terreno": False,
     },
@@ -575,6 +686,40 @@ def sembrar_catalogos_base_tocal(empresa_id, actor=None):
                     RequisitoCapacitacion.objects.create(
                         empresa=empresa,
                         tipo_capacitacion=tc_maq,
+                        cargo=c_obj,
+                        obra=None,
+                        obligatorio=True,
+                        activo=True,
+                    )
+                    resumen["requisitos_capacitacion_creados"] += 1
+
+        tc_oficina = tipos_cap_map.get("ergonomia-pausas-activas-oficina")
+        if tc_oficina:
+            for cod_c in ("gerente-general", "director-obras", "administrador-obra", "oficina-tecnica", "administrativo-obras"):
+                c_obj = cargos_map.get(cod_c)
+                if c_obj and not RequisitoCapacitacion.objects.filter(
+                    empresa=empresa, tipo_capacitacion=tc_oficina, cargo=c_obj, obra__isnull=True
+                ).exists():
+                    RequisitoCapacitacion.objects.create(
+                        empresa=empresa,
+                        tipo_capacitacion=tc_oficina,
+                        cargo=c_obj,
+                        obra=None,
+                        obligatorio=True,
+                        activo=True,
+                    )
+                    resumen["requisitos_capacitacion_creados"] += 1
+
+        tc_minsal = tipos_cap_map.get("protocolos-minsal-silice-ruido-uv")
+        if tc_minsal:
+            for cod_c in ("capataz", "maestro", "maestro-primera", "maestro-segunda", "jornal", "trazador", "topografo", "operador-maquinaria", "auxiliar-aseo"):
+                c_obj = cargos_map.get(cod_c)
+                if c_obj and not RequisitoCapacitacion.objects.filter(
+                    empresa=empresa, tipo_capacitacion=tc_minsal, cargo=c_obj, obra__isnull=True
+                ).exists():
+                    RequisitoCapacitacion.objects.create(
+                        empresa=empresa,
+                        tipo_capacitacion=tc_minsal,
                         cargo=c_obj,
                         obra=None,
                         obligatorio=True,

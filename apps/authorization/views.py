@@ -105,19 +105,28 @@ def audit_logs_list(request, empresa_id):
         qs = qs.filter(entidad=entidad[:80])
     if accion:
         qs = qs.filter(accion=accion[:80])
-    items = [
-        {
+    items = []
+    for entry in qs[:200]:
+        actor_name = ''
+        actor_email = ''
+        actor_username = None
+        if entry.actor:
+            actor_name = (getattr(entry.actor, 'name', '') or '').strip()
+            actor_email = (getattr(entry.actor, 'email', '') or '').strip()
+            raw_username = entry.actor.get_username()
+            actor_username = actor_name or actor_email or raw_username
+        items.append({
             'id': str(entry.pk),
             'actor_id': entry.actor_id,
-            'actor_username': entry.actor.get_username() if entry.actor else None,
+            'actor_name': actor_name or None,
+            'actor_email': actor_email or None,
+            'actor_username': actor_username,
             'accion': entry.accion,
             'entidad': entry.entidad,
             'entidad_id': entry.entidad_id,
             'detalle': entry.detalle,
             'creado_en': entry.creado_en.isoformat(),
-        }
-        for entry in qs[:200]
-    ]
+        })
     return JsonResponse({'results': items})
 
 

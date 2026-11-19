@@ -109,6 +109,7 @@ def _serialize_doc_generic(doc, extra_fields=None, ids_con_archivo=None):
             if ids_con_archivo is not None
             else (doc.version_aprobada_id is not None or doc.archivos.exists())
         ),
+        'total_archivos': doc.archivos.count(),
         'vencido': venc['vencido'],
         'por_vencer': venc['por_vencer'],
         'dias_restantes': venc['dias_restantes'],
@@ -192,6 +193,8 @@ def _handle_review(request, empresa_id, doc_instance, revision_model, audit_acti
         data = _payload(request)
         _fields(data, {'estado', 'observaciones', 'motivo_rechazo', 'archivo_id'})
         estado = data.get('estado')
+        if estado == 'en_revision':
+            estado = 'pendiente'
         if estado not in ('pendiente', 'aprobado', 'rechazado'):
             raise ValueError('Estado inválido.')
         observaciones = data.get('observaciones', doc_instance.observaciones)
@@ -1760,6 +1763,14 @@ def dossier_fiscalizacion_fuf_ds44(request, empresa_id):
             'descripcion': 'Documentación técnica, mantenciones preventivas y listas de chequeo (checklists) digitales en terreno.',
             'evidencia': f"Equipos activos: {kpis['equipos_activos']} ({kpis['equipos_habilitados']} habilitados) | Checklists digitales registrados: {checklists_count}.",
             'estado': 'cumple' if kpis['equipos_con_vencidos'] == 0 and (kpis['equipos_activos'] > 0 or checklists_count > 0) else 'observado',
+        },
+        {
+            'codigo': 'FUF-08',
+            'norma': 'Protocolos MINSAL / SEREMI de Salud (PLANESI, PREXOR, RUVS, TMERT)',
+            'titulo': 'Vigilancia Ambiental y de la Salud de Agentes de Riesgo (Sílice, Ruido, Radiación UV y Ergonomía)',
+            'descripcion': 'Programas de vigilancia ocupacional para exposición a sílice (PLANESI), ruido (PREXOR), radiación UV solar (RUVS), trastornos musculoesqueléticos (TMERT) y ergonomía.',
+            'evidencia': f"Cumplimiento corporativo SST/MINSAL: {comp_emp['porcentaje_cumplimiento']}% | Capacitaciones y protocolos vigentes: {cap_total}.",
+            'estado': 'cumple' if comp_emp['porcentaje_cumplimiento'] >= 80 and cap_total > 0 else ('observado' if cap_total > 0 or comp_emp['aprobados'] > 0 else 'pendiente'),
         },
     ]
 

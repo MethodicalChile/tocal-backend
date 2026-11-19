@@ -859,7 +859,15 @@ def calcular_dashboard_cumplimiento(
             "ultimo_informe_pdr": {
                 "id": ultimo_pdr.pk,
                 "semana_numero": ultimo_pdr.semana.numero if ultimo_pdr.semana_id else None,
-                "fecha": ultimo_pdr.fecha.isoformat(),
+                "fecha": (
+                    ultimo_pdr.updated_at.date().isoformat()
+                    if getattr(ultimo_pdr, "updated_at", None)
+                    else (
+                        ultimo_pdr.semana.fecha_fin.isoformat()
+                        if ultimo_pdr.semana_id and getattr(ultimo_pdr.semana, "fecha_fin", None)
+                        else hoy.isoformat()
+                    )
+                ),
                 "evaluado_por": ultimo_pdr.evaluado_por,
             } if ultimo_pdr else None,
         })

@@ -33,6 +33,9 @@ SUPABASE_S3_BUCKET_NAME=tocal-privado
 SUPABASE_S3_REGION_NAME=sa-east-1
 ```
 
+admin@tocal.cl
+Tocal2026!Admin
+
 > **Nota para pruebas automatizadas (`T13.6`):** Durante la ejecución de `python manage.py test`, `config/settings.py` utiliza automáticamente SQLite en memoria (`:memory:`) y almacenamiento privado temporal local, garantizando aislamiento total respecto de la base de datos y bucket de desarrollo/producción.
 
 ---
