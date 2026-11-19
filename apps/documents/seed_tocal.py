@@ -68,9 +68,23 @@ TIPOS_DOCUMENTALES_TOCAL = [
     },
     {
         "codigo": "examen-ocupacional",
-        "nombre": "Examen Preocupacional / Altura Física",
+        "nombre": "Examen Preocupacional / Ocupacional General (Mutualidad)",
         "categoria": "trabajador",
-        "descripcion": "Certificado de aptitud médica emitido por mutualidad (altura física, espacios confinados o maquinaria).",
+        "descripcion": "Certificado administrativo de aptitud ocupacional emitido por mutualidad (sin diagnósticos clínicos sensibles).",
+        "requiere_vencimiento": True,
+    },
+    {
+        "codigo": "aptitud-altura-fisica",
+        "nombre": "Certificado de Aptitud Trabajo en Altura Física",
+        "categoria": "trabajador",
+        "descripcion": "Certificado médico-administrativo vigente que acredita aptitud para labores sobre 1,8 m de altura.",
+        "requiere_vencimiento": True,
+    },
+    {
+        "codigo": "aptitud-psicosensometrico",
+        "nombre": "Certificado Psicosensométrico Riguroso (Conductores / Operadores)",
+        "categoria": "trabajador",
+        "descripcion": "Evaluación psicosensométrica vigente para operación de maquinaria pesada o vehículos de obra.",
         "requiere_vencimiento": True,
     },
     {
@@ -86,6 +100,55 @@ TIPOS_DOCUMENTALES_TOCAL = [
         "nombre": "Reglamento Interno de Orden, Higiene y Seguridad (RIOHS)",
         "categoria": "empresa",
         "descripcion": "Reglamento Interno vigente con comprobante de depósito ante Dirección del Trabajo y SEREMI de Salud.",
+        "requiere_vencimiento": True,
+    },
+    {
+        "codigo": "formato-irl-odi",
+        "nombre": "Formato Corporativo de Información de Riesgos Laborales (IRL / ODI)",
+        "categoria": "empresa",
+        "descripcion": "Matrices y formatos oficiales de Información de Riesgos Laborales por cargo según DS 44.",
+        "requiere_vencimiento": True,
+    },
+    {
+        "codigo": "pts-excavaciones",
+        "nombre": "PTS-01 Procedimiento de Trabajo Seguro: Excavaciones y Entibaciones",
+        "categoria": "empresa",
+        "descripcion": "Procedimiento técnico versionado y aprobado para excavaciones, taludes y zanjas.",
+        "requiere_vencimiento": True,
+    },
+    {
+        "codigo": "pts-trabajo-altura",
+        "nombre": "PTS-02 Procedimiento de Trabajo Seguro: Trabajo en Altura y Andamios",
+        "categoria": "empresa",
+        "descripcion": "Procedimiento técnico versionado para armado/uso de andamios, escalas y detención de caídas.",
+        "requiere_vencimiento": True,
+    },
+    {
+        "codigo": "pts-izaje-cargas",
+        "nombre": "PTS-03 Procedimiento de Trabajo Seguro: Izaje y Cargas Suspendidas",
+        "categoria": "empresa",
+        "descripcion": "Procedimiento técnico versionado para maniobras de izaje, grúas, eslingas y rigger.",
+        "requiere_vencimiento": True,
+    },
+    {
+        "codigo": "pts-herramientas-electricas",
+        "nombre": "PTS-04 Procedimiento de Trabajo Seguro: Herramientas Eléctricas y Tableros",
+        "categoria": "empresa",
+        "descripcion": "Procedimiento técnico versionado para herramientas portátiles, extensiones y tableros provisionales.",
+        "requiere_vencimiento": True,
+    },
+    {
+        "codigo": "pts-hormigonado",
+        "nombre": "PTS-05 Procedimiento de Trabajo Seguro: Hormigonado y Bombeo",
+        "categoria": "empresa",
+        "descripcion": "Procedimiento técnico versionado para descarga, bombeo, vibrado y curado de hormigón.",
+        "requiere_vencimiento": True,
+    },
+    {
+        "codigo": "pts-enfierradura",
+        "nombre": "PTS-06 Procedimiento de Trabajo Seguro: Enfierradura y Moldajes",
+        "categoria": "empresa",
+        "descripcion": "Procedimiento técnico versionado para corte, doblado, colocación de acero y moldajes.",
         "requiere_vencimiento": True,
     },
     {
@@ -207,6 +270,38 @@ CAPACITACIONES_TOCAL = [
         "nombre": "Primeros Auxilios y Actuación ante Accidentes Graves (Circular 3705)",
         "descripcion": "Protocolo de atención primaria y notificación de accidentes graves o fatales en obra.",
         "horas_sugeridas": 4,
+        "requiere_vencimiento": True,
+        "vigencia_meses": 12,
+    },
+    {
+        "codigo": "pts-excavaciones-difusion",
+        "nombre": "Difusión y Evaluación PTS-01: Excavaciones y Entibaciones",
+        "descripcion": "Capacitación, registro de asistencia firmada y evaluación de comprensión del PTS de excavaciones.",
+        "horas_sugeridas": 2,
+        "requiere_vencimiento": True,
+        "vigencia_meses": 12,
+    },
+    {
+        "codigo": "pts-altura-difusion",
+        "nombre": "Difusión y Evaluación PTS-02: Trabajo en Altura y Andamios",
+        "descripcion": "Capacitación, registro de asistencia firmada y evaluación de comprensión del PTS de altura y andamios.",
+        "horas_sugeridas": 2,
+        "requiere_vencimiento": True,
+        "vigencia_meses": 12,
+    },
+    {
+        "codigo": "pts-herramientas-difusion",
+        "nombre": "Difusión y Evaluación PTS-04: Herramientas Eléctricas y Tableros",
+        "descripcion": "Capacitación, registro de asistencia firmada y evaluación del PTS de herramientas eléctricas.",
+        "horas_sugeridas": 2,
+        "requiere_vencimiento": True,
+        "vigencia_meses": 12,
+    },
+    {
+        "codigo": "pts-hormigonado-difusion",
+        "nombre": "Difusión y Evaluación PTS-05: Hormigonado y Enfierradura",
+        "descripcion": "Capacitación, registro de asistencia firmada y evaluación del PTS de hormigonado y moldajes.",
+        "horas_sugeridas": 2,
         "requiere_vencimiento": True,
         "vigencia_meses": 12,
     },
@@ -376,6 +471,8 @@ def sembrar_catalogos_base_tocal(empresa_id, actor=None):
             "prevencionista-riesgos",
             "topografo",
             "trazador",
+            "capataz",
+            "maestro",
             "maestro-primera",
             "maestro-segunda",
             "operador-maquinaria",
@@ -386,8 +483,11 @@ def sembrar_catalogos_base_tocal(empresa_id, actor=None):
             codigos_para_cargo = list(docs_transversales_trabajador)
             if cod_cargo in cargos_terreno_altura:
                 codigos_para_cargo.append("examen-ocupacional")
+                if cod_cargo in {"maestro", "maestro-primera", "maestro-segunda", "trazador"}:
+                    codigos_para_cargo.append("aptitud-altura-fisica")
             if cod_cargo in cargos_conduccion:
                 codigos_para_cargo.append("licencia-conducir-operador")
+                codigos_para_cargo.append("aptitud-psicosensometrico")
 
             for cod_doc in codigos_para_cargo:
                 td = tipos_doc_map.get(cod_doc)

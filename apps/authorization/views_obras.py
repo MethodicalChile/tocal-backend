@@ -5,8 +5,8 @@ from django.core.exceptions import ValidationError
 from django.db import IntegrityError, transaction
 from django.http import JsonResponse
 from django.views.decorators.http import require_http_methods
-from intranet.models import Obra
-from .models import Empresa, EmpresaObra, RegistroAuditoria
+from intranet.models import Obra, Trabajador, Venta
+from .models import Empresa, EmpresaObra, MembresiaEmpresa, RegistroAuditoria
 from .permissions import authorized_obra_ids, has_permission
 
 
@@ -40,6 +40,93 @@ def _record(v):
     }
 
 
+def _build_obras_catalogos(empresa_id):
+    """Construye opciones sugeridas de mandantes (con razón social y RUT), servicios, responsables y mutualidades."""
+    mandantes_map = {}
+
+    # 1. Mandantes / razones sociales desde Obras existentes
+    for ob in Obra.objects.all().order_by('nombre'):
+        label = (ob.mandante or ob.razon_social or '').strip()
+        if label and label.lower() not in mandantes_map:
+            mandantes_map[label.lower()] = {
+                'mandante': label,
+                'razon_social': (ob.razon_social or label).strip(),
+                'rut': (ob.rut or '').strip(),
+            }
+
+    # 2. Clientes históricos desde Libro de Ventas (tocal_ventas_documentos)
+    try:
+        ventas_clientes = (
+            Venta.objects.exclude(razon_social__isnull=True)
+            .exclude(razon_social='')
+            .values('razon_social', 'rut_cliente')
+            .distinct()[:150]
+        )
+        for vc in ventas_clientes:
+            rz = (vc.get('razon_social') or '').strip()
+            rut_c = (vc.get('rut_cliente') or '').strip()
+            if rz and rz.lower() not in mandantes_map:
+                mandantes_map[rz.lower()] = {
+                    'mandante': rz,
+                    'razon_social': rz,
+                    'rut': rut_c,
+                }
+    except Exception:
+        pass
+
+    # 3. Empresas registradas en la plataforma
+    for emp in Empresa.objects.filter(activa=True).order_by('nombre'):
+        if emp.nombre.lower() not in mandantes_map:
+            mandantes_map[emp.nombre.lower()] = {
+                'mandante': emp.nombre,
+                'razon_social': emp.nombre,
+                'rut': emp.rut or '',
+            }
+
+    # 4. Servicios habituales de constructora + existentes en obras
+    servicios_base = [
+        'Construcción y Obras Civiles',
+        'Edificación Industrial y Galpones',
+        'Montaje Estructural y Metálico',
+        'Urbanización, Movimiento de Tierras y Pavimentación',
+        'Habilitación Comercial e Institucional',
+        'Obras Hidráulicas y Sanitarias',
+        'Infraestructura Energética',
+        'Remodelación y Mantención Mayor',
+    ]
+    for s in Obra.objects.values_list('servicio', flat=True).distinct():
+        if s and s.strip() and s.strip() not in servicios_base:
+            servicios_base.append(s.strip())
+
+    # 5. Responsables (Trabajadores y Miembros de la empresa)
+    responsables = []
+    seen_resp = set()
+    for w in Trabajador.objects.filter(empresa_id=empresa_id, activo=True).order_by('nombres', 'apellido_paterno'):
+        full = f"{w.nombres} {w.apellido_paterno} {w.apellido_materno}".strip()
+        if full and full.lower() not in seen_resp:
+            seen_resp.add(full.lower())
+            responsables.append(full)
+    for m in MembresiaEmpresa.objects.filter(empresa_id=empresa_id, activa=True).select_related('usuario'):
+        uname = (getattr(m.usuario, 'name', '') or m.usuario.email or '').strip()
+        if uname and uname.lower() not in seen_resp:
+            seen_resp.add(uname.lower())
+            responsables.append(uname)
+
+    mutualidades = [
+        'ACHS (Asociación Chilena de Seguridad)',
+        'Mutual de Seguridad CChC',
+        'IST (Instituto de Seguridad del Trabajo)',
+        'ISL (Instituto de Seguridad Laboral)',
+    ]
+
+    return {
+        'mandantes': sorted(mandantes_map.values(), key=lambda x: x['mandante'].lower()),
+        'servicios': servicios_base,
+        'responsables': responsables,
+        'mutualidades': mutualidades,
+    }
+
+
 @require_http_methods(['GET', 'POST'])
 def company_works(request, empresa_id):
     if not request.user.is_authenticated or not request.user.is_active:
@@ -53,7 +140,10 @@ def company_works(request, empresa_id):
         entries = EmpresaObra.objects.filter(empresa_id=empresa_id).select_related('obra').order_by('obra__nombre')
         if scope is not None:
             entries = entries.filter(obra_id__in=scope)
-        return JsonResponse({'results': [_record(entry) for entry in entries]})
+        return JsonResponse({
+            'results': [_record(entry) for entry in entries],
+            'catalogos': _build_obras_catalogos(empresa_id),
+        })
 
     if not _allowed(request, empresa_id, 'obras.crear'):
         return JsonResponse({'error': 'Sin acceso'}, status=403)

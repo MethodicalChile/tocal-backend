@@ -45,4 +45,10 @@ urlpatterns = [
     path('empresas/<uuid:empresa_id>/dashboard-cumplimiento/', views_extended.dashboard_cumplimiento, name='documentos-dashboard-cumplimiento'),
     path('empresas/<uuid:empresa_id>/exportar-cumplimiento/', views_extended.exportar_cumplimiento_csv, name='documentos-exportar-cumplimiento'),
     path('empresas/<uuid:empresa_id>/sembrar-catalogos-tocal/', views_extended.sembrar_catalogos_tocal_view, name='documentos-sembrar-catalogos-tocal'),
+    # RF-06, RF-12, RF-15, RF-16: Hombre Nuevo, Checklists Digitales, Consulta en Terreno y Dossier FUF/DS44
+    path('empresas/<uuid:empresa_id>/trabajadores/<str:trabajador_id>/hombre-nuevo/', views_extended.registrar_kit_hombre_nuevo, name='documentos-trabajador-hombre-nuevo'),
+    path('empresas/<uuid:empresa_id>/charla-cuadrilla/', views_extended.charla_diaria_cuadrilla_rf08, name='documentos-charla-cuadrilla'),
+    path('empresas/<uuid:empresa_id>/consulta-terreno/', views_extended.consulta_terreno_rf15, name='documentos-consulta-terreno'),
+    path('empresas/<uuid:empresa_id>/checklists/', views_extended.checklists_digitales_rf12, name='documentos-checklists'),
+    path('empresas/<uuid:empresa_id>/dossier-fuf-ds44/', views_extended.dossier_fiscalizacion_fuf_ds44, name='documentos-dossier-fuf-ds44'),
 ]

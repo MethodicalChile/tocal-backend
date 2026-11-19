@@ -5,8 +5,9 @@ from django.db import IntegrityError, transaction
 from django.db.models import F, Q
 from django.http import JsonResponse
 from django.views.decorators.http import require_GET, require_http_methods
-from .models import AsignacionRol, Empresa, EmpresaObra, MembresiaEmpresa, RegistroAuditoria
+from .models import AsignacionRol, Empresa, EmpresaObra, MembresiaEmpresa, Permiso, RegistroAuditoria, Rol, RolPermiso
 from .permissions import has_any_obra_permission, has_permission
+from .services import assign_role
 
 
 @require_GET
@@ -51,7 +52,7 @@ def my_companies(request):
 
 
 def _serialize_empresa(empresa):
-    return {
+    payload = {
         'id': str(empresa.pk),
         'nombre': empresa.nombre,
         'rut': empresa.rut,
@@ -60,6 +61,104 @@ def _serialize_empresa(empresa):
         'total_obras': EmpresaObra.objects.filter(empresa=empresa).count(),
         'total_miembros_activos': MembresiaEmpresa.objects.filter(empresa=empresa, activa=True).count(),
     }
+    return {**payload, 'empresa': payload}
+
+
+@require_http_methods(['POST'])
+def company_create(request):
+    """Permite a un administrador crear una nueva empresa, aprovisionando roles base y membresía."""
+    if not request.user.is_authenticated or not request.user.is_active:
+        return JsonResponse({'error': 'Autenticación requerida'}, status=401)
+
+    # Verificar que el usuario sea superuser/staff o tenga permiso roles.administrar / empresas.editar en alguna empresa
+    is_admin_anywhere = (
+        request.user.is_superuser
+        or request.user.is_staff
+        or getattr(request.user, 'rol', '') in ('admin', 'gerencia')
+        or AsignacionRol.objects.filter(
+            membresia__usuario=request.user,
+            membresia__activa=True,
+            activa=True,
+            rol__activo=True,
+            rol__permisos_asignados__permiso__codigo__in=('roles.administrar', 'empresas.editar'),
+        ).exists()
+    )
+    if not is_admin_anywhere:
+        return JsonResponse({'error': 'No tienes permisos para crear nuevas empresas'}, status=403)
+
+    try:
+        if len(request.body) > 16_384:
+            raise ValueError('Solicitud demasiado grande')
+        data = json.loads(request.body.decode('utf-8'))
+        if not isinstance(data, dict) or (set(data.keys()) - {'nombre', 'rut', 'sembrar_catalogos'}):
+            raise ValueError('Campos inválidos')
+        nombre = (data.get('nombre') or '').strip()
+        if not nombre:
+            raise ValueError('El nombre o razón social de la empresa es obligatorio')
+        rut_val = (data.get('rut') or '').strip() or None
+        if rut_val and Empresa.objects.filter(rut=rut_val).exists():
+            return JsonResponse({'error': 'Ya existe una empresa registrada con ese RUT'}, status=409)
+        sembrar = bool(data.get('sembrar_catalogos', True))
+
+        with transaction.atomic():
+            nueva = Empresa(nombre=nombre[:200], rut=rut_val, activa=True)
+            nueva.full_clean()
+            nueva.save()
+
+            # Crear membresía activa para el creador
+            membresia = MembresiaEmpresa.objects.create(
+                empresa=nueva,
+                usuario=request.user,
+                activa=True,
+            )
+
+            # Crear rol Administrador General con todos los permisos activos y asignarlo al creador
+            rol_admin = Rol.objects.create(
+                empresa=nueva,
+                codigo='administrador_general',
+                nombre='Administrador General',
+                descripcion='Acceso administrativo y operacional completo en la empresa.',
+                activo=True,
+                protegido=True,
+            )
+            permisos_activos = list(Permiso.objects.filter(activo=True))
+            RolPermiso.objects.bulk_create([
+                RolPermiso(rol=rol_admin, permiso=p) for p in permisos_activos
+            ])
+            assign_role(usuario=request.user, empresa=nueva, rol=rol_admin, obra=None)
+
+            # Crear roles operativos estándar para la nueva empresa
+            roles_operativos = [
+                ('prevencionista', 'Prevencionista de Riesgos', 'Gestión documental, capacitaciones, EPP, checklists y cumplimiento DS 44.'),
+                ('jefe_obra', 'Jefe / Administrador de Obra', 'Supervisión integral de obra, avance físico, personal y cumplimiento.'),
+                ('supervisor', 'Supervisor / Jefe de Terreno', 'Consulta rápida en terreno, checklists e informes operacionales.'),
+                ('trabajador', 'Trabajador / Lectura', 'Consulta de información autorizada.'),
+            ]
+            for cod, nom, desc in roles_operativos:
+                Rol.objects.get_or_create(
+                    empresa=nueva,
+                    codigo=cod,
+                    defaults={'nombre': nom, 'descripcion': desc, 'activo': True, 'protegido': False},
+                )
+
+            if sembrar:
+                from apps.documents.seed_tocal import sembrar_catalogos_base_tocal
+                sembrar_catalogos_base_tocal(nueva.pk, actor=request.user)
+
+            RegistroAuditoria.objects.create(
+                empresa=nueva,
+                actor=request.user,
+                accion='empresa.crear',
+                entidad='Empresa',
+                entidad_id=str(nueva.pk),
+                detalle={'nombre': nueva.nombre, 'rut': nueva.rut, 'sembrar_catalogos': sembrar},
+            )
+
+        return JsonResponse(_serialize_empresa(nueva), status=201)
+    except (ValueError, TypeError, ValidationError, json.JSONDecodeError) as exc:
+        return JsonResponse({'error': str(exc)}, status=400)
+    except IntegrityError:
+        return JsonResponse({'error': 'Ya existe una empresa con ese nombre o RUT'}, status=409)
 
 
 @require_http_methods(['GET', 'PATCH'])

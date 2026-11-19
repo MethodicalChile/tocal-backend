@@ -70,7 +70,9 @@ def audit(empresa, actor, action, obj, details):
 def assignment_dict(a):
     return {'id': str(a.pk), 'usuario_id': a.membresia.usuario_id,
             'rol_id': str(a.rol_id), 'rol': a.rol.codigo,
+            'rol_nombre': a.rol.nombre,
             'obra_id': a.empresa_obra.obra_id if a.empresa_obra_id else None,
+            'obra_nombre': a.empresa_obra.obra.nombre if (a.empresa_obra_id and getattr(a.empresa_obra, 'obra', None)) else None,
             'activa': a.activa}
 
 
@@ -87,12 +89,17 @@ def has_company_admin(empresa):
 
 @route(['GET'])
 def members_list(request, empresa_id):
+    from intranet.models import Trabajador
     empresa = Empresa.objects.filter(pk=empresa_id, activa=True).first()
     if not empresa or not (can_admin(request.user, empresa) or
                           has_permission(user=request.user, empresa_id=empresa_id,
                                          permission='usuarios.ver')):
         return JsonResponse({'error': 'Sin acceso'}, status=403)
     qs = MembresiaEmpresa.objects.filter(empresa=empresa).select_related('usuario').order_by('usuario_id')
+    workers_by_user = {
+        w.usuario_id: w
+        for w in Trabajador.objects.filter(empresa=empresa, usuario__isnull=False)
+    }
     return JsonResponse({'results': [
         {
             'id': str(m.pk),
@@ -101,6 +108,11 @@ def members_list(request, empresa_id):
             'name': getattr(m.usuario, 'name', '') or m.usuario.get_username(),
             'email': getattr(m.usuario, 'email', ''),
             'activa': m.activa,
+            'trabajador_id': workers_by_user[m.usuario_id].pk if m.usuario_id in workers_by_user else None,
+            'trabajador_nombre': (
+                f"{workers_by_user[m.usuario_id].nombres} {workers_by_user[m.usuario_id].apellido_paterno}".strip()
+                if m.usuario_id in workers_by_user else None
+            ),
             'permisos_efectivos': sorted(effective_permissions(user=m.usuario, empresa_id=empresa.pk)) if m.activa else [],
         }
         for m in qs

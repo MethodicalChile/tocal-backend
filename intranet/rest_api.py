@@ -10,7 +10,7 @@ from decimal import Decimal
 from functools import wraps
 
 from django import forms as django_forms
-from django.contrib.auth import authenticate, login, logout
+from django.contrib.auth import authenticate, login, logout, update_session_auth_hash
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import IntegrityError, transaction
 from django.db.models import Q, Sum
@@ -183,7 +183,14 @@ def signin(request):
         return response({'error': 'Credenciales incorrectas'}, 401)
     login(request, user)
     request.session.cycle_key()
-    return response({'user': {'id': user.pk, 'name': user.name, 'email': user.email, 'role': user.rol}})
+    import time
+    from django.conf import settings as dj_settings
+    request.session['_last_activity_ts'] = int(time.time())
+    return response({
+        'user': {'id': user.pk, 'name': user.name, 'email': user.email, 'role': user.rol},
+        'inactivity_timeout_seconds': int(getattr(dj_settings, 'SESSION_INACTIVITY_TIMEOUT_SECONDS', 300) or 300),
+        'inactivity_warning_seconds': int(getattr(dj_settings, 'SESSION_INACTIVITY_WARNING_SECONDS', 10) or 10),
+    })
 
 
 @api_call(('POST',))
@@ -192,11 +199,59 @@ def signout(request):
     return response({'ok': True})
 
 
+@api_call(('POST',))
+def profile_update(request):
+    """Permite al usuario autenticado actualizar su nombre y/o cambiar su contraseña."""
+    data = input_data(request)
+    u = request.user
+    new_name = str(data.get('name', '')).strip()[:160]
+    current_password = str(data.get('current_password', ''))
+    new_password = str(data.get('new_password', ''))
+
+    fields_to_update = []
+    if new_name and new_name != u.name:
+        u.name = new_name
+        fields_to_update.append('name')
+
+    if new_password:
+        if not current_password or not u.check_password(current_password):
+            return response({'error': 'La contraseña actual no es correcta.'}, 400)
+        if len(new_password) < 12:
+            return response({'error': 'La nueva contraseña debe tener al menos 12 caracteres.'}, 400)
+        u.set_password(new_password)
+        fields_to_update.append('password')
+
+    if not fields_to_update:
+        return response({'error': 'No se indicaron cambios para guardar.'}, 400)
+
+    u.save(update_fields=fields_to_update)
+    if 'password' in fields_to_update:
+        update_session_auth_hash(request, u)
+
+    return response({
+        'ok': True,
+        'user': {'id': u.pk, 'name': u.name, 'email': u.email, 'role': u.rol},
+    })
+
+
 @api_call()
 def session(request):
     u = request.user
+    fichas = {}
+    try:
+        for tr in m.Trabajador.objects.filter(usuario_id=u.pk, activo=True):
+            fichas[str(tr.empresa_id)] = {
+                'id': str(tr.id),
+                'nombre': f'{tr.nombres} {tr.apellido_paterno} {tr.apellido_materno}'.strip(),
+            }
+    except Exception:
+        pass
+    from django.conf import settings as dj_settings
     return response({'id': u.pk, 'name': u.name, 'email': u.email, 'role': u.rol,
                      'rbac': uses_rbac(u),
+                     'fichas_trabajador': fichas,
+                     'inactivity_timeout_seconds': int(getattr(dj_settings, 'SESSION_INACTIVITY_TIMEOUT_SECONDS', 300) or 300),
+                     'inactivity_warning_seconds': int(getattr(dj_settings, 'SESSION_INACTIVITY_WARNING_SECONDS', 10) or 10),
                      'modules': visible_modules(u), 'obras': [primitive(x) for x in visible_obras(u)]})
 
 

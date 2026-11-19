@@ -15,7 +15,7 @@ from django.http import JsonResponse
 from django.shortcuts import get_object_or_404
 from django.views.decorators.http import require_http_methods
 
-from apps.authorization.models import Empresa, EmpresaObra, RegistroAuditoria
+from apps.authorization.models import Empresa, EmpresaObra, MembresiaEmpresa, RegistroAuditoria
 from apps.authorization.permissions import authorized_obra_ids, has_any_obra_permission, has_permission
 from .models import Cargo, Trabajador, AsignacionTrabajadorObra
 
@@ -35,6 +35,11 @@ PERFILES_CARGOS_TOCAL = [
         "codigo": "residente-obras",
         "nombre": "Residente de Obras",
         "descripcion": "Responsable máximo de la ejecución técnica, administrativa y de seguridad en la obra.",
+    },
+    {
+        "codigo": "administrador-obra",
+        "nombre": "Administrador de Obra",
+        "descripcion": "Planificación integral, control contractual, gestión de recursos y representación técnica en obra.",
     },
     {
         "codigo": "jefe-terreno",
@@ -72,9 +77,24 @@ PERFILES_CARGOS_TOCAL = [
         "descripcion": "Recepción, almacenamiento, inventario y despacho de materiales, herramientas y EPP en obra.",
     },
     {
+        "codigo": "topografo",
+        "nombre": "Topógrafo",
+        "descripcion": "Levantamientos topográficos, control geométrico, niveles y replanteo de precisión en obra.",
+    },
+    {
+        "codigo": "trazador",
+        "nombre": "Trazador",
+        "descripcion": "Materialización de ejes, niveles y trazados constructivos en terreno conforme a planos de proyecto.",
+    },
+    {
         "codigo": "capataz",
         "nombre": "Capataz",
         "descripcion": "Liderazgo directo de cuadrillas operativas, distribución de tareas y control de seguridad en el frente.",
+    },
+    {
+        "codigo": "maestro",
+        "nombre": "Maestro",
+        "descripcion": "Ejecución calificada de partidas de construcción civil, terminaciones, carpintería o albañilería.",
     },
     {
         "codigo": "maestro-primera",
@@ -95,6 +115,16 @@ PERFILES_CARGOS_TOCAL = [
         "codigo": "operador-maquinaria",
         "nombre": "Operador de Maquinaria",
         "descripcion": "Operación segura y certificada de maquinaria pesada, equipos de izaje o movimiento de tierras.",
+    },
+    {
+        "codigo": "conductor-obra",
+        "nombre": "Conductor de Obra",
+        "descripcion": "Conducción autorizada de vehículos de obra, transporte de materiales y logística operativa.",
+    },
+    {
+        "codigo": "auxiliar-aseo",
+        "nombre": "Auxiliar de Aseo",
+        "descripcion": "Mantención de orden, higiene y sanitización de instalaciones de faena, oficinas y comedores.",
     },
 ]
 
@@ -162,6 +192,9 @@ def worker_json(worker, sensitive=False):
     data = {"id": worker.pk, "empresa_id": str(worker.empresa_id),
             "nombres": worker.nombres, "apellido_paterno": worker.apellido_paterno,
             "apellido_materno": worker.apellido_materno, "activo": worker.activo,
+            "usuario_id": str(worker.usuario_id) if worker.usuario_id else None,
+            "usuario_email": worker.usuario.email if (worker.usuario_id and getattr(worker, "usuario", None)) else None,
+            "usuario_nombre": (worker.usuario.name or worker.usuario.email) if (worker.usuario_id and getattr(worker, "usuario", None)) else None,
             "creado_en": worker.creado_en.isoformat()}
     if sensitive:
         data["rut"] = worker.rut
@@ -301,7 +334,7 @@ def trabajadores(request, empresa_id):
         scope = authorized_obra_ids(user=request.user, permission="empleados.ver", empresa_id=empresa.pk)
         if scope == set():
             return result({"error": "No tienes permisos para esta operación"}, 403)
-        qs = Trabajador.objects.filter(empresa=empresa)
+        qs = Trabajador.objects.filter(empresa=empresa).select_related("usuario")
         obra_filter = request.GET.get("obra_id")
         if obra_filter:
             if scope is not None and obra_filter not in scope:
@@ -349,15 +382,28 @@ def trabajadores(request, empresa_id):
         })
     denied = permitted(request, empresa, "crear")
     if denied: return denied
-    data = payload(request, {"nombres", "apellido_paterno", "apellido_materno", "rut"})
+    data = payload(request, {"nombres", "apellido_paterno", "apellido_materno", "rut", "usuario_id"})
     if not data.get("nombres") or not data.get("apellido_paterno"):
         raise ValidationError("nombres y apellido_paterno son obligatorios")
     if "rut" in data and permitted(request, empresa, "ver_sensibles") is not None:
         return result({"error": "No autorizado a registrar datos sensibles"}, 403)
+    linked_user = None
+    if data.get("usuario_id"):
+        m = MembresiaEmpresa.objects.select_related("usuario").filter(
+            empresa=empresa, usuario_id=data["usuario_id"], activa=True
+        ).first()
+        if not m:
+            raise ValidationError("El usuario seleccionado no tiene membresía activa en esta empresa")
+        if Trabajador.objects.filter(empresa=empresa, usuario=m.usuario).exists():
+            raise ValidationError("Ese usuario ya está vinculado a otra ficha de trabajador en esta empresa")
+        linked_user = m.usuario
     with transaction.atomic():
-        obj = Trabajador(empresa=empresa)
+        obj = Trabajador(empresa=empresa, usuario=linked_user)
         set_fields(obj, data, ("nombres", "apellido_paterno", "apellido_materno", "rut"))
-        _audit(empresa, request.user, "trabajador.crear", "Trabajador", obj.pk, {"con_rut": bool(data.get("rut"))})
+        _audit(empresa, request.user, "trabajador.crear", "Trabajador", obj.pk, {
+            "con_rut": bool(data.get("rut")),
+            "usuario_id": str(linked_user.pk) if linked_user else None,
+        })
     return result({"record": worker_json(obj, permitted(request, empresa, "ver_sensibles") is None)}, 201)
 
 
@@ -373,7 +419,7 @@ def trabajador_detail(request, empresa_id, trabajador_id):
         scope = None
         denied = permitted(request, empresa, action)
         if denied: return denied
-    obj = get_object_or_404(Trabajador, empresa=empresa, pk=trabajador_id)
+    obj = get_object_or_404(Trabajador.objects.select_related("usuario"), empresa=empresa, pk=trabajador_id)
     if request.method == "GET" and scope is not None:
         if not AsignacionTrabajadorObra.objects.filter(empresa=empresa, trabajador=obj, obra_id__in=scope).exists():
             return result({"error": "No tienes permisos para esta operación"}, 403)
@@ -384,9 +430,22 @@ def trabajador_detail(request, empresa_id, trabajador_id):
         obra_ids=scope,
     )
     if request.method == "PATCH":
-        data = payload(request, {"nombres", "apellido_paterno", "apellido_materno", "rut", "activo"})
+        data = payload(request, {"nombres", "apellido_paterno", "apellido_materno", "rut", "activo", "usuario_id"})
         if "rut" in data and not sensitive:
             return result({"error": "No autorizado a modificar datos sensibles"}, 403)
+        if "usuario_id" in data:
+            raw_uid = str(data.get("usuario_id") or "").strip()
+            if not raw_uid:
+                obj.usuario = None
+            else:
+                m = MembresiaEmpresa.objects.select_related("usuario").filter(
+                    empresa=empresa, usuario_id=raw_uid, activa=True
+                ).first()
+                if not m:
+                    raise ValidationError("El usuario seleccionado no tiene membresía activa en esta empresa")
+                if Trabajador.objects.filter(empresa=empresa, usuario=m.usuario).exclude(pk=obj.pk).exists():
+                    raise ValidationError("Ese usuario ya está vinculado a otra ficha de trabajador en esta empresa")
+                obj.usuario = m.usuario
         with transaction.atomic():
             set_fields(obj, data, ("nombres", "apellido_paterno", "apellido_materno", "rut", "activo"))
             _audit(empresa, request.user, "trabajador.editar", "Trabajador", obj.pk, {"campos": sorted(set(data.keys()) - {"rut"})})
@@ -610,3 +669,134 @@ def asignacion_detail(request, empresa_id, obra_id, asignacion_id):
             {"obra_id": enlace.obra.pk, "campos": sorted(data.keys())},
         )
     return result({"record": assignment_json(obj)})
+
+
+@endpoint(["POST"])
+def trabajadores_carga_masiva(request, empresa_id):
+    """Carga masiva rápida de cuadrillas / trabajadores desde líneas CSV o planilla pegada."""
+    empresa = company(empresa_id)
+    denied = permitted(request, empresa, "crear")
+    if denied:
+        return denied
+
+    data = payload(request, {"lineas_texto", "obra_id", "cargo_id"})
+    raw_text = str(data.get("lineas_texto") or "").strip()
+    if not raw_text:
+        raise ValidationError("Debes ingresar al menos una fila con datos de trabajadores.")
+
+    default_obra_id = str(data.get("obra_id") or "").strip()
+    default_cargo_id = str(data.get("cargo_id") or "").strip()
+
+    enlace_default = link(empresa, default_obra_id) if default_obra_id else None
+    cargo_default = (
+        get_object_or_404(Cargo, empresa=empresa, pk=default_cargo_id, activo=True)
+        if default_cargo_id
+        else None
+    )
+
+    sens = has_any_obra_permission(
+        user=request.user,
+        permission="empleados.ver_sensibles",
+        empresa_id=empresa.pk,
+    )
+    hoy = date.today()
+    creados = 0
+    actualizados = 0
+    asignaciones_creadas = 0
+    errores = []
+    registros = []
+
+    lines = [ln.strip() for ln in raw_text.splitlines() if ln.strip()]
+    with transaction.atomic():
+        for idx, line in enumerate(lines, start=1):
+            # Ignorar cabecera si la primera línea dice "nombres" o "rut"
+            lower = line.lower()
+            if idx == 1 and ("apellido" in lower or ("nombre" in lower and "rut" in lower)):
+                continue
+            sep = ";" if ";" in line else ("\t" if "\t" in line else ",")
+            parts = [p.strip() for p in line.split(sep)]
+            if len(parts) < 2:
+                errores.append(f"Línea {idx}: formato inválido (se requiere al menos Nombres y Apellido Paterno).")
+                continue
+
+            nombres = parts[0][:120]
+            ap_paterno = parts[1][:120]
+            ap_materno = parts[2][:120] if len(parts) >= 3 else ""
+            rut_val = parts[3][:20] if (len(parts) >= 4 and sens) else None
+            if rut_val == "":
+                rut_val = None
+
+            if not nombres or not ap_paterno:
+                errores.append(f"Línea {idx}: Nombres y Apellido Paterno son obligatorios.")
+                continue
+
+            worker = None
+            if rut_val:
+                worker = Trabajador.objects.filter(empresa=empresa, rut__iexact=rut_val).first()
+
+            if worker:
+                worker.nombres = nombres
+                worker.apellido_paterno = ap_paterno
+                if ap_materno:
+                    worker.apellido_materno = ap_materno
+                worker.activo = True
+                worker.full_clean()
+                worker.save()
+                actualizados += 1
+            else:
+                worker = Trabajador(
+                    empresa=empresa,
+                    nombres=nombres,
+                    apellido_paterno=ap_paterno,
+                    apellido_materno=ap_materno,
+                    rut=rut_val,
+                    activo=True,
+                )
+                worker.full_clean()
+                worker.save()
+                creados += 1
+
+            if enlace_default and cargo_default:
+                existe_asig = AsignacionTrabajadorObra.objects.filter(
+                    empresa=empresa,
+                    obra=enlace_default.obra,
+                    trabajador=worker,
+                    fecha_fin__isnull=True,
+                ).exists()
+                if not existe_asig:
+                    asig = AsignacionTrabajadorObra(
+                        empresa=empresa,
+                        obra=enlace_default.obra,
+                        trabajador=worker,
+                        cargo=cargo_default,
+                        fecha_inicio=hoy,
+                        observaciones="Asignación creada por carga masiva de cuadrilla",
+                    )
+                    asig.full_clean()
+                    asig.save()
+                    asignaciones_creadas += 1
+
+            registros.append(worker_json(worker, sens))
+
+        _audit(
+            empresa,
+            request.user,
+            "trabajador.carga_masiva",
+            "Trabajador",
+            empresa.pk,
+            {
+                "creados": creados,
+                "actualizados": actualizados,
+                "asignaciones_creadas": asignaciones_creadas,
+                "errores": len(errores),
+            },
+        )
+
+    return result({
+        "creados": creados,
+        "actualizados": actualizados,
+        "asignaciones_creadas": asignaciones_creadas,
+        "errores": errores,
+        "results": registros,
+    }, 201)
+

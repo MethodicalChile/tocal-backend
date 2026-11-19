@@ -8,6 +8,7 @@ urlpatterns = [
     path('empresas/<uuid:empresa_id>/cargos/catalogo-tocal', w.seed_tocal_cargos),
     path('empresas/<uuid:empresa_id>/cargos/<str:cargo_id>', w.cargo_detail),
     path('empresas/<uuid:empresa_id>/trabajadores', w.trabajadores),
+    path('empresas/<uuid:empresa_id>/trabajadores/carga-masiva', w.trabajadores_carga_masiva),
     path('empresas/<uuid:empresa_id>/trabajadores/<str:trabajador_id>', w.trabajador_detail),
     path('empresas/<uuid:empresa_id>/obras/<str:obra_id>/trabajadores/asignaciones', w.asignaciones),
     path('empresas/<uuid:empresa_id>/obras/<str:obra_id>/trabajadores/asignaciones/<str:asignacion_id>', w.asignacion_detail),
@@ -15,6 +16,7 @@ urlpatterns = [
     path('csrf', a.csrf),
     path('auth/login', a.signin),
     path('auth/logout', a.signout),
+    path('auth/perfil', a.profile_update),
     path('session', a.session),
     path('dashboard', a.dashboard),
     path('obras/<str:obra_id>/resumen', a.obra_summary),
@@ -39,5 +41,7 @@ urlpatterns = [
     path('ventas/importar', a.sales_import),
     path('ventas/consulta', a.sales_lookup),
     path('privacidad/solicitudes', privacy_api.requests),
+    path('privacidad/solicitudes/<str:pk>', privacy_api.manage_request),
+    path('privacidad/portabilidad', privacy_api.portabilidad),
     path('files/<path:key>', a.private_file),
 ]

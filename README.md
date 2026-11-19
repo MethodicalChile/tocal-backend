@@ -51,6 +51,9 @@ python manage.py migrate
 
 # Ejecución de la suite completa de pruebas
 python manage.py test
+
+# Levantar el servidor de desarrollo local (en http://127.0.0.1:8000)
+python manage.py runserver
 ```
 
 ---
